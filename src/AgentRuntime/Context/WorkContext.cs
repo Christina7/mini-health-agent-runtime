@@ -1,3 +1,5 @@
+using AgentRuntime.Tools;
+
 namespace AgentRuntime.Context;
 
 /// <summary>
@@ -8,6 +10,7 @@ namespace AgentRuntime.Context;
 public sealed class WorkContext
 {
     private readonly List<Turn> _history = new();
+    private readonly List<Observation> _observations = new();
 
     public WorkContext(string conversationId)
     {
@@ -19,10 +22,19 @@ public sealed class WorkContext
     /// <summary>User and agent messages, in order, across every turn of this conversation.</summary>
     public IReadOnlyList<Turn> History => _history;
 
+    /// <summary>Tool results gathered during the current turn's act -> observe loop.</summary>
+    public IReadOnlyList<Observation> Observations => _observations;
+
     public void AppendUser(string text) => _history.Add(new Turn(TurnRole.User, text));
 
     public void AppendAgent(string text) => _history.Add(new Turn(TurnRole.Agent, text));
+
+    public void RecordObservation(string toolName, ToolResult result) =>
+        _observations.Add(new Observation(toolName, result));
 }
+
+/// <summary>One tool invocation's result, recorded so the planner can read it on the next step.</summary>
+public sealed record Observation(string ToolName, ToolResult Result);
 
 public enum TurnRole
 {
