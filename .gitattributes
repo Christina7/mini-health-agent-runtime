@@ -1,0 +1,13 @@
+# Normalize line endings: store text as LF in the repo, convert on checkout per platform.
+* text=auto
+
+# Keep these as LF everywhere (tooling expects it)
+*.cs    text eol=lf
+*.csproj text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.sh    text eol=lf
+
+# Solution files conventionally use CRLF
+*.sln   text eol=crlf

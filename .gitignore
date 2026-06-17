@@ -1,0 +1,24 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+
+# Test results
+[Tt]est[Rr]esults/
+*.trx
+*.coverage
+coverage/
+
+# IDE / OS
+.vs/
+.idea/
+*.suo
+.DS_Store
+Thumbs.db
+
+# Personal resume source files — keep local, never publish
+resume-ai-en.md
+resume-general-en.md
+Yu_Jing_Resume_Revised.md
