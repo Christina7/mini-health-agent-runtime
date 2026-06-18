@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AgentRuntime.Context;
 using AgentRuntime.Llm;
 
@@ -30,8 +31,22 @@ public sealed class MockTriagePlanner : ILlmClient
             return Task.FromResult<PlanDecision>(new PlanDecision.CallTool(SymptomKb, default));
         }
 
-        var score = kb?.Result.Output.GetProperty("score").GetInt32() ?? 0;
-        var advice = kb?.Result.Output.GetProperty("advice").GetString() ?? string.Empty;
+        // The symptom lookup failed and the runtime degraded the turn: don't assert an urgency we
+        // couldn't actually assess — return a safe, clearly-degraded recommendation.
+        if (ctx.Degraded || kb is { Result.Success: false })
+        {
+            var degraded = new TriageResult
+            {
+                Urgency = UrgencyLevel.SeeGp,
+                RecommendedAction = "I couldn't verify your symptoms against the guidance right now; please consult a healthcare professional.",
+                ToolsInvoked = ctx.Observations.Select(o => o.ToolName).Distinct().ToArray(),
+                Degraded = true,
+            };
+            return Task.FromResult<PlanDecision>(new PlanDecision.Finish(degraded.RecommendedAction, degraded.ToJson()));
+        }
+
+        var score = ReadInt(kb?.Result.Output, "score");
+        var advice = ReadString(kb?.Result.Output, "advice");
         var urgency = _policy.Classify(score);
 
         var result = new TriageResult
@@ -48,6 +63,16 @@ public sealed class MockTriagePlanner : ILlmClient
 
         return Task.FromResult<PlanDecision>(new PlanDecision.Finish(message, result.ToJson()));
     }
+
+    private static int ReadInt(JsonElement? output, string property) =>
+        output is { ValueKind: JsonValueKind.Object } el && el.TryGetProperty(property, out var p) && p.TryGetInt32(out var v)
+            ? v
+            : 0;
+
+    private static string ReadString(JsonElement? output, string property) =>
+        output is { ValueKind: JsonValueKind.Object } el && el.TryGetProperty(property, out var p)
+            ? p.GetString() ?? string.Empty
+            : string.Empty;
 
     private static string ActionFor(UrgencyLevel urgency) => urgency switch
     {

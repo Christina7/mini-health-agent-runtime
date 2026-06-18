@@ -1,4 +1,5 @@
 using AgentRuntime.Context;
+using AgentRuntime.Failure;
 using AgentRuntime.Llm;
 using AgentRuntime.Tools;
 
@@ -7,8 +8,8 @@ namespace AgentRuntime.Orchestration;
 /// <summary>
 /// The core agent loop. Appends the user message to the <see cref="WorkContext"/>, then repeats
 /// plan -> act -> observe: ask the planner for the next step, either run a tool (recording its
-/// result as an observation) or finish. Guardrails, failure handling, and config-driven step
-/// budgets are added in later slices.
+/// result as an observation) or finish. Tool execution goes through an <see cref="ExecutionScope"/>
+/// so a failing tool degrades the turn instead of throwing. Config-driven step budgets arrive later.
 /// </summary>
 public sealed class AgentOrchestrator
 {
@@ -18,12 +19,18 @@ public sealed class AgentOrchestrator
     private readonly ILlmClient _planner;
     private readonly ToolRegistry _tools;
     private readonly IReadOnlyList<IGuardrail> _guardrails;
+    private readonly ExecutionScope _scope;
 
-    public AgentOrchestrator(ILlmClient planner, ToolRegistry tools, IEnumerable<IGuardrail>? guardrails = null)
+    public AgentOrchestrator(
+        ILlmClient planner,
+        ToolRegistry tools,
+        IEnumerable<IGuardrail>? guardrails = null,
+        ExecutionScope? scope = null)
     {
         _planner = planner;
         _tools = tools;
         _guardrails = (guardrails ?? Array.Empty<IGuardrail>()).ToList();
+        _scope = scope ?? new ExecutionScope(maxRetries: 0);
     }
 
     public async Task<TurnResult> RunTurnAsync(WorkContext ctx, string userMessage, CancellationToken ct)
@@ -50,7 +57,7 @@ public sealed class AgentOrchestrator
             {
                 case PlanDecision.Finish finish:
                     ctx.AppendAgent(finish.Message);
-                    return new TurnResult(finish.Message, Result: finish.Result);
+                    return new TurnResult(finish.Message, Degraded: ctx.Degraded, Result: finish.Result);
 
                 case PlanDecision.CallTool call:
                     if (!_tools.TryGet(call.ToolName, out var tool))
@@ -58,8 +65,23 @@ public sealed class AgentOrchestrator
                         throw new InvalidOperationException($"Unknown tool: {call.ToolName}");
                     }
 
-                    var result = await tool.ExecuteAsync(call.Args, ctx, ct);
-                    ctx.RecordObservation(call.ToolName, result);
+                    // Run the tool through the resilience policy: a failure here can impact the
+                    // response, so it retries then degrades to a safe "tool unavailable" observation.
+                    var scopeResult = await _scope.TryExecuteAsync(
+                        $"tool:{call.ToolName}",
+                        FailureMode.CanImpactResponse,
+                        c => tool.ExecuteAsync(call.Args, ctx, c),
+                        fallback: () => new ToolResult(Success: false, Output: default, Error: "tool unavailable"),
+                        ct);
+
+                    if (scopeResult.Degraded)
+                    {
+                        ctx.Degraded = true;
+                    }
+
+                    var observation = scopeResult.Value
+                        ?? new ToolResult(Success: false, Output: default, Error: "tool unavailable");
+                    ctx.RecordObservation(call.ToolName, observation);
                     break;
 
                 default:
@@ -67,9 +89,9 @@ public sealed class AgentOrchestrator
             }
         }
 
-        // Step budget exhausted -> safe degraded fallback (pinned by a dedicated slice).
-        var fallback = "I wasn't able to complete this safely; please consult a professional.";
-        ctx.AppendAgent(fallback);
-        return new TurnResult(fallback, Degraded: true);
+        // Step budget exhausted -> safe degraded fallback (never loops forever, never crashes).
+        var budgetFallback = "I wasn't able to complete this safely; please consult a professional.";
+        ctx.AppendAgent(budgetFallback);
+        return new TurnResult(budgetFallback, Degraded: true);
     }
 }

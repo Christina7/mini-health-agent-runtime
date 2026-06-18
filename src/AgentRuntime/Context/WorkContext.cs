@@ -19,6 +19,9 @@ public sealed class WorkContext
 
     public string ConversationId { get; }
 
+    /// <summary>True once a tool failure forced the turn into a degraded (safe-fallback) mode.</summary>
+    public bool Degraded { get; internal set; }
+
     /// <summary>User and agent messages, in order, across every turn of this conversation.</summary>
     public IReadOnlyList<Turn> History => _history;
 

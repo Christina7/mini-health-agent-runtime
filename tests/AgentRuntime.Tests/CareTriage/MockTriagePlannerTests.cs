@@ -1,6 +1,8 @@
 using AgentRuntime.Context;
+using AgentRuntime.Failure;
 using AgentRuntime.Llm;
 using AgentRuntime.Orchestration;
+using AgentRuntime.Tests.Support;
 using AgentRuntime.Tools;
 using CareTriageAgent.Tools;
 using CareTriageAgent.Triage;
@@ -48,5 +50,24 @@ public class MockTriagePlannerTests
 
         var triage = TriageResult.FromJson(turn.Result!.Value);
         Assert.Equal(UrgencyLevel.Emergency, triage.Urgency); // 1 (sore throat) + 8 (trouble breathing) = 9 > 8
+    }
+
+    // Slice 8 (degrade end-to-end): when the symptom lookup fails, the planner doesn't crash on
+    // the empty observation — it produces a safe, degraded TriageResult instead.
+    [Fact]
+    public async Task Failed_symptom_lookup_yields_a_safe_degraded_result()
+    {
+        var registry = new ToolRegistry(new ITool[] { new ThrowingTool("symptom_kb") });
+        var policy = new TriagePolicy(new TriageThresholds(SelfCareMaxScore: 2, SeeGpMaxScore: 5, UrgentCareMaxScore: 8));
+        var scope = new ExecutionScope(maxRetries: 1);
+        var orchestrator = new AgentOrchestrator(new MockTriagePlanner(policy), registry, guardrails: null, scope: scope);
+        var ctx = new WorkContext("conv-1");
+
+        var turn = await orchestrator.RunTurnAsync(ctx, "sore throat", CancellationToken.None);
+
+        Assert.True(turn.Degraded);
+        var triage = TriageResult.FromJson(turn.Result!.Value);
+        Assert.True(triage.Degraded);
+        Assert.Contains("consult", triage.RecommendedAction, StringComparison.OrdinalIgnoreCase);
     }
 }
