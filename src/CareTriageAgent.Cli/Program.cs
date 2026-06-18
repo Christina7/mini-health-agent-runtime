@@ -1,20 +1,33 @@
-using System.Text.Json;
 using AgentRuntime.Context;
-using AgentRuntime.Llm;
 using AgentRuntime.Orchestration;
 using AgentRuntime.Tools;
 using CareTriageAgent.Guardrails;
+using CareTriageAgent.Tools;
+using CareTriageAgent.Triage;
 
-// Slice 1-2 placeholder host: drives the real AgentOrchestrator with a stand-in planner and a
-// stand-in tool so the plan -> act -> observe loop is visibly runnable end-to-end. Later slices
-// replace these with the CareTriageAgent domain (red-flag guardrail, real symptom KB / clinic
-// tools, the mock planner) and a text trace tree.
+// CLI host: drives the real CareTriageAgent brain through the runtime orchestrator on deterministic,
+// offline data. The red-flag guardrail runs first; otherwise the MockTriagePlanner scores symptoms
+// via the KB tool and classifies urgency with TriagePolicy. (Data is in-memory here; loading from
+// Data/*.json + RuntimeConfig arrives in a later slice. A live trace tree arrives with the web host.)
 
 var message = args.Length > 0
     ? string.Join(' ', args)
     : "sore throat and mild fever since yesterday";
 
-var tools = new ToolRegistry(new ITool[] { new DemoSymptomTool() });
+var knowledgeBase = new[]
+{
+    new SymptomEntry("sore_throat", new[] { "sore throat", "throat pain" }, BaseSeverity: 1, SelfCareAdvice: "Rest, fluids, and throat lozenges usually help."),
+    new SymptomEntry("fever", new[] { "fever", "high temperature" }, BaseSeverity: 1, SelfCareAdvice: "Stay hydrated and monitor your temperature."),
+    new SymptomEntry("headache", new[] { "headache" }, BaseSeverity: 1, SelfCareAdvice: "Rest and over-the-counter pain relief may help."),
+    new SymptomEntry("cough", new[] { "cough" }, BaseSeverity: 1, SelfCareAdvice: "A cough often clears on its own within a couple of weeks."),
+    new SymptomEntry("dizziness", new[] { "dizzy", "dizziness", "lightheaded" }, BaseSeverity: 3, SelfCareAdvice: "Sit or lie down; avoid sudden movements."),
+    new SymptomEntry("abdominal_pain", new[] { "abdominal pain", "stomach pain", "belly pain" }, BaseSeverity: 4, SelfCareAdvice: "Note where the pain is and whether it worsens."),
+    new SymptomEntry("chest_pain", new[] { "chest pain", "chest tightness" }, BaseSeverity: 7, SelfCareAdvice: "Chest pain should be assessed promptly."),
+    new SymptomEntry("breathing_difficulty", new[] { "shortness of breath", "trouble breathing", "can't breathe" }, BaseSeverity: 8, SelfCareAdvice: "Difficulty breathing needs prompt assessment."),
+};
+
+var tools = new ToolRegistry(new ITool[] { new SymptomKnowledgeBaseTool(knowledgeBase) });
+
 var guardrails = new IGuardrail[]
 {
     new RedFlagGuardrail(new[]
@@ -22,55 +35,32 @@ var guardrails = new IGuardrail[]
         new RedFlagRule(
             Id: "cardiac",
             AllOf: new[] { "chest pain", "shortness of breath" },
-            Message: "🚨 Possible cardiac emergency — call your local emergency number / go to the ER now.")
-    })
+            Message: "🚨 Possible cardiac emergency — call your local emergency number / go to the ER now."),
+    }),
 };
-var orchestrator = new AgentOrchestrator(new DemoPlanner(), tools, guardrails);
+
+var policy = new TriagePolicy(new TriageThresholds(SelfCareMaxScore: 2, SeeGpMaxScore: 5, UrgentCareMaxScore: 8));
+var orchestrator = new AgentOrchestrator(new MockTriagePlanner(policy), tools, guardrails);
 var ctx = new WorkContext(conversationId: "cli-session");
 
 Console.WriteLine($"> {message}");
-var result = await orchestrator.RunTurnAsync(ctx, message, CancellationToken.None);
+var turn = await orchestrator.RunTurnAsync(ctx, message, CancellationToken.None);
 
-foreach (var obs in ctx.Observations)
+Console.WriteLine();
+Console.WriteLine($"Agent: {turn.Message}");
+
+if (turn.Result is { } resultJson)
 {
-    Console.WriteLine($"  [tool] {obs.ToolName} -> {obs.Result.Output.GetRawText()}");
+    var triage = TriageResult.FromJson(resultJson);
+    Console.WriteLine();
+    Console.WriteLine("  ┌─ Triage ─────────────────────────────");
+    Console.WriteLine($"  │ Urgency:     {triage.Urgency}");
+    Console.WriteLine($"  │ Action:      {triage.RecommendedAction}");
+    Console.WriteLine($"  │ Tools used:  {string.Join(", ", triage.ToolsInvoked)}");
+    Console.WriteLine($"  │ {triage.Disclaimer}");
+    Console.WriteLine("  └──────────────────────────────────────");
 }
-
-Console.WriteLine($"Agent: {result.Message}");
-Console.WriteLine("        ⚠ Educational only — not medical advice.");
-
-// Stand-in planner: call the symptom tool, then finish using what it observed.
-internal sealed class DemoPlanner : ILlmClient
+else
 {
-    private int _step;
-
-    public Task<PlanDecision> PlanNextStepAsync(
-        WorkContext ctx, IReadOnlyList<ToolDescriptor> tools, CancellationToken ct)
-    {
-        _step++;
-        if (_step == 1)
-        {
-            return Task.FromResult<PlanDecision>(new PlanDecision.CallTool("symptom_kb", default));
-        }
-
-        var advice = ctx.Observations[^1].Result.Output.GetProperty("advice").GetString();
-        return Task.FromResult<PlanDecision>(
-            new PlanDecision.Finish($"{advice} See a GP if it persists beyond a few days or worsens."));
-    }
-}
-
-// Stand-in tool: returns canned self-care advice. The real symptom KB arrives in a later slice.
-internal sealed class DemoSymptomTool : ITool
-{
-    public string Name => "symptom_kb";
-    public string Description => "Looks up self-care guidance for described symptoms.";
-    public JsonElement InputSchema { get; } =
-        JsonDocument.Parse("""{"type":"object"}""").RootElement.Clone();
-
-    public Task<ToolResult> ExecuteAsync(JsonElement args, WorkContext ctx, CancellationToken ct)
-    {
-        var output = JsonDocument.Parse("""{"advice":"Looks self-manageable; rest and fluids."}""")
-            .RootElement.Clone();
-        return Task.FromResult(new ToolResult(Success: true, Output: output));
-    }
+    Console.WriteLine("        ⚠ Educational only — not medical advice.");
 }

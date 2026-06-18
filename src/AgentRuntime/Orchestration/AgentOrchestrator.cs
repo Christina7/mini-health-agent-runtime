@@ -50,7 +50,7 @@ public sealed class AgentOrchestrator
             {
                 case PlanDecision.Finish finish:
                     ctx.AppendAgent(finish.Message);
-                    return new TurnResult(finish.Message);
+                    return new TurnResult(finish.Message, Result: finish.Result);
 
                 case PlanDecision.CallTool call:
                     if (!_tools.TryGet(call.ToolName, out var tool))

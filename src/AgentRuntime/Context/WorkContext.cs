@@ -25,6 +25,23 @@ public sealed class WorkContext
     /// <summary>Tool results gathered during the current turn's act -> observe loop.</summary>
     public IReadOnlyList<Observation> Observations => _observations;
 
+    /// <summary>The most recent user message, or empty string if none yet.</summary>
+    public string LatestUserText
+    {
+        get
+        {
+            for (var i = _history.Count - 1; i >= 0; i--)
+            {
+                if (_history[i].Role == TurnRole.User)
+                {
+                    return _history[i].Text;
+                }
+            }
+
+            return string.Empty;
+        }
+    }
+
     public void AppendUser(string text) => _history.Add(new Turn(TurnRole.User, text));
 
     public void AppendAgent(string text) => _history.Add(new Turn(TurnRole.Agent, text));
