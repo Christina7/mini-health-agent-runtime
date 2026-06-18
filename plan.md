@@ -26,3 +26,17 @@ You can also edit src/CareTriageAgent.Cli/config/runtimeconfig.json or the fligh
 
 What's in this slice: RuntimeConfigProvider.Resolve<T> (typed config), CareTriageConfig, shipped config/runtimeconfig.json + config/flights/*.json, and the CLI now builds thresholds, retry count, and enabled tools entirely from the effective config — plus --flight.
 
+
+The trace tree tells the whole story visually — the OpenTelemetry bullet made tangible:
+
+┌──────────┬─────────────────────────────────────────────────────────────────────┐
+│   Flow   │                                Trace                                │
+├──────────┼─────────────────────────────────────────────────────────────────────┤
+│ Normal   │ triage.turn → guardrail → agent.step → tool:symptom_kb → agent.step │
+├──────────┼─────────────────────────────────────────────────────────────────────┤
+│ Degraded │ triage.turn ⚠degraded → … → tool:symptom_kb ⚠degraded               │
+├──────────┼─────────────────────────────────────────────────────────────────────┤
+│ Red-flag │ triage.turn → guardrail (short-circuits — nothing runs after)       │
+└──────────┴─────────────────────────────────────────────────────────────────────┘
+
+That red-flag trace is especially nice: you can see the guardrail fire and zero steps/tools after it.
