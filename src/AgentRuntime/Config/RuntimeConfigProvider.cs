@@ -21,6 +21,16 @@ public sealed class RuntimeConfigProvider
         _flights = flights ?? new Dictionary<string, string>();
     }
 
+    private static readonly JsonSerializerOptions DeserializeOptions = new(JsonSerializerDefaults.Web);
+
+    /// <summary>Resolve the effective config and deserialize it into a strongly-typed config object.</summary>
+    public T Resolve<T>(params string[] activeFlights)
+    {
+        var node = Resolve(activeFlights);
+        return node.Deserialize<T>(DeserializeOptions)
+            ?? throw new InvalidOperationException($"Effective config could not be read as {typeof(T).Name}.");
+    }
+
     /// <summary>Resolve the effective config with the given flights applied, in order.</summary>
     public JsonNode Resolve(params string[] activeFlights)
     {
