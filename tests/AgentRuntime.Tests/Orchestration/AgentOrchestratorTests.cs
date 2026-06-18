@@ -1,4 +1,5 @@
 using AgentRuntime.Context;
+using AgentRuntime.Failure;
 using AgentRuntime.Llm;
 using AgentRuntime.Orchestration;
 using AgentRuntime.Tests.Support;
@@ -101,5 +102,24 @@ public class AgentOrchestratorTests
         Assert.True(result.Degraded);
         // Bounded: the tool ran exactly the step-budget number of times, never unbounded.
         Assert.Equal(AgentOrchestrator.MaxSteps, tool.CallCount);
+    }
+
+    // Slice 8 (degrade wiring): a tool that throws is retried via the ExecutionScope, then the
+    // turn degrades to a safe outcome instead of throwing. The failure never escapes the orchestrator.
+    [Fact]
+    public async Task Tool_failure_is_retried_then_degrades_the_turn()
+    {
+        var failing = new ThrowingTool("symptom_kb");
+        var registry = new ToolRegistry(new ITool[] { failing });
+        var planner = new CallThenFinishPlanner("symptom_kb", "done");
+        var scope = new ExecutionScope(maxRetries: 2);
+
+        var orchestrator = new AgentOrchestrator(planner, registry, guardrails: null, scope: scope);
+        var ctx = new WorkContext("conv-1");
+
+        var result = await orchestrator.RunTurnAsync(ctx, "anything", CancellationToken.None);
+
+        Assert.True(result.Degraded);
+        Assert.Equal(3, failing.CallCount); // first attempt + two retries
     }
 }
