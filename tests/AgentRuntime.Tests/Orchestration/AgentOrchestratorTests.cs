@@ -51,4 +51,28 @@ public class AgentOrchestratorTests
         Assert.True(symptomKb.WasCalled);
         Assert.Contains("rest and fluids", result.Message);
     }
+
+    // Slice 3 (guardrail pipeline): a guardrail that short-circuits ends the turn with its
+    // message and the planner is never consulted. Proves guardrails run before any planning.
+    [Fact]
+    public async Task Short_circuiting_guardrail_ends_turn_without_planning()
+    {
+        // Strict: any call to the planner would throw, so Times.Never is enforced two ways.
+        var planner = new Mock<ILlmClient>(MockBehavior.Strict);
+
+        var guardrail = new Mock<IGuardrail>();
+        guardrail
+            .Setup(g => g.EvaluateAsync(It.IsAny<WorkContext>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new GuardrailVerdict(ShortCircuit: true, Message: "🚨 Possible emergency — call your local emergency number."));
+
+        var orchestrator = new AgentOrchestrator(planner.Object, EmptyRegistry(), new[] { guardrail.Object });
+        var ctx = new WorkContext("conv-1");
+
+        var result = await orchestrator.RunTurnAsync(ctx, "severe chest pain", CancellationToken.None);
+
+        Assert.Contains("emergency", result.Message, StringComparison.OrdinalIgnoreCase);
+        planner.Verify(
+            p => p.PlanNextStepAsync(It.IsAny<WorkContext>(), It.IsAny<IReadOnlyList<ToolDescriptor>>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
 }
