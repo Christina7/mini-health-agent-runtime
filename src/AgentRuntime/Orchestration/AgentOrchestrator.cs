@@ -17,16 +17,30 @@ public sealed class AgentOrchestrator
 
     private readonly ILlmClient _planner;
     private readonly ToolRegistry _tools;
+    private readonly IReadOnlyList<IGuardrail> _guardrails;
 
-    public AgentOrchestrator(ILlmClient planner, ToolRegistry tools)
+    public AgentOrchestrator(ILlmClient planner, ToolRegistry tools, IEnumerable<IGuardrail>? guardrails = null)
     {
         _planner = planner;
         _tools = tools;
+        _guardrails = (guardrails ?? Array.Empty<IGuardrail>()).ToList();
     }
 
     public async Task<TurnResult> RunTurnAsync(WorkContext ctx, string userMessage, CancellationToken ct)
     {
         ctx.AppendUser(userMessage);
+
+        // Guardrail pipeline: runs before any planning, every turn. A short-circuit ends the turn.
+        foreach (var guardrail in _guardrails)
+        {
+            var verdict = await guardrail.EvaluateAsync(ctx, ct);
+            if (verdict.ShortCircuit)
+            {
+                var message = verdict.Message ?? string.Empty;
+                ctx.AppendAgent(message);
+                return new TurnResult(message);
+            }
+        }
 
         for (var step = 1; step <= MaxSteps; step++)
         {

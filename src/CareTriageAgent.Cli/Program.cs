@@ -3,6 +3,7 @@ using AgentRuntime.Context;
 using AgentRuntime.Llm;
 using AgentRuntime.Orchestration;
 using AgentRuntime.Tools;
+using CareTriageAgent.Guardrails;
 
 // Slice 1-2 placeholder host: drives the real AgentOrchestrator with a stand-in planner and a
 // stand-in tool so the plan -> act -> observe loop is visibly runnable end-to-end. Later slices
@@ -14,7 +15,17 @@ var message = args.Length > 0
     : "sore throat and mild fever since yesterday";
 
 var tools = new ToolRegistry(new ITool[] { new DemoSymptomTool() });
-var orchestrator = new AgentOrchestrator(new DemoPlanner(), tools);
+var guardrails = new IGuardrail[]
+{
+    new RedFlagGuardrail(new[]
+    {
+        new RedFlagRule(
+            Id: "cardiac",
+            AllOf: new[] { "chest pain", "shortness of breath" },
+            Message: "🚨 Possible cardiac emergency — call your local emergency number / go to the ER now.")
+    })
+};
+var orchestrator = new AgentOrchestrator(new DemoPlanner(), tools, guardrails);
 var ctx = new WorkContext(conversationId: "cli-session");
 
 Console.WriteLine($"> {message}");
