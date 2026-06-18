@@ -1,0 +1,3 @@
+[
+  { "op": "replace", "path": "/tools/symptom_kb/enabled", "value": false }
+]

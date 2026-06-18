@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Care Triage — mini agent runtime</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+    h1 { font-size: 1.3rem; }
+    .row { display: flex; gap: .5rem; margin: 1rem 0; }
+    input[type=text] { flex: 1; padding: .5rem; font-size: 1rem; }
+    button { padding: .5rem 1rem; font-size: 1rem; cursor: pointer; }
+    pre { background: #f5f5f5; padding: 1rem; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; }
+    .reply { font-weight: 600; }
+    .disclaimer { color: #666; font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <h1>Care Triage <span class="disclaimer">— educational only, not medical advice</span></h1>
+  <p class="disclaimer">Try: <em>"sore throat and mild fever"</em> or <em>"severe chest pain and shortness of breath"</em>.</p>
+
+  <div class="row">
+    <input type="text" id="message" placeholder="Describe your symptoms…" autofocus />
+    <button id="send">Send</button>
+  </div>
+
+  <p class="reply" id="reply"></p>
+  <pre id="output" hidden></pre>
+
+  <script>
+    // Slice 1 is a deliberately bare page that proves the POST /triage round-trip end to end.
+    // Slice 2 replaces this with the color-coded triage card + the rendered trace tree.
+    let conversationId = null;
+
+    async function send() {
+      const input = document.getElementById('message');
+      const message = input.value.trim();
+      if (!message) return;
+
+      const res = await fetch('/triage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId, message }),
+      });
+      const data = await res.json();
+      conversationId = data.conversationId;
+
+      document.getElementById('reply').textContent = data.reply ?? '';
+      const output = document.getElementById('output');
+      output.hidden = false;
+      output.textContent = JSON.stringify({ triage: data.triage, trace: data.trace, turnCount: data.turnCount }, null, 2);
+      input.value = '';
+      input.focus();
+    }
+
+    document.getElementById('send').addEventListener('click', send);
+    document.getElementById('message').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+  </script>
+</body>
+</html>

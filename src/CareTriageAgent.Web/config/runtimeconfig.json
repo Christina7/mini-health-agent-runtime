@@ -1,0 +1,10 @@
+{
+  "agent": { "maxSteps": 6, "llmProvider": "mock" },
+  "tools": {
+    "symptom_kb": { "enabled": true }
+  },
+  "triage": { "selfCareMaxScore": 2, "seeGpMaxScore": 5, "urgentCareMaxScore": 8 },
+  "context": { "providerCacheEnabled": true, "cacheTtlSeconds": 300 },
+  "resilience": { "toolMaxRetries": 2, "prefetchEnabled": false },
+  "anthropic": { "model": "claude-opus-4-8" }
+}
