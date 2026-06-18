@@ -1,0 +1,4 @@
+[
+  { "op": "replace", "path": "/triage/selfCareMaxScore", "value": 0 },
+  { "op": "replace", "path": "/triage/seeGpMaxScore", "value": 2 }
+]

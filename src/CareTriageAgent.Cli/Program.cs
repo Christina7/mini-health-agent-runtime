@@ -59,32 +59,15 @@ catch (ArgumentException ex)
     return 1;
 }
 
-var knowledgeBase = new[]
-{
-    new SymptomEntry("sore_throat", new[] { "sore throat", "throat pain" }, BaseSeverity: 1, SelfCareAdvice: "Rest, fluids, and throat lozenges usually help."),
-    new SymptomEntry("fever", new[] { "fever", "high temperature" }, BaseSeverity: 1, SelfCareAdvice: "Stay hydrated and monitor your temperature."),
-    new SymptomEntry("headache", new[] { "headache" }, BaseSeverity: 1, SelfCareAdvice: "Rest and over-the-counter pain relief may help."),
-    new SymptomEntry("cough", new[] { "cough" }, BaseSeverity: 1, SelfCareAdvice: "A cough often clears on its own within a couple of weeks."),
-    new SymptomEntry("dizziness", new[] { "dizzy", "dizziness", "lightheaded" }, BaseSeverity: 3, SelfCareAdvice: "Sit or lie down; avoid sudden movements."),
-    new SymptomEntry("abdominal_pain", new[] { "abdominal pain", "stomach pain", "belly pain" }, BaseSeverity: 4, SelfCareAdvice: "Note where the pain is and whether it worsens."),
-    new SymptomEntry("chest_pain", new[] { "chest pain", "chest tightness" }, BaseSeverity: 7, SelfCareAdvice: "Chest pain should be assessed promptly."),
-    new SymptomEntry("breathing_difficulty", new[] { "shortness of breath", "trouble breathing", "can't breathe" }, BaseSeverity: 8, SelfCareAdvice: "Difficulty breathing needs prompt assessment."),
-};
-
-// Candidate tools and red-flag rules are domain data. CareTriageSession filters tools by config and
-// registers the guardrail unconditionally (the safety invariant), wiring everything from config.
+// Candidate tools and red-flag rules are domain data, shared with the web host via CareTriageDomain.
+// CareTriageSession filters tools by config and registers the guardrail unconditionally (the safety
+// invariant), wiring everything from config.
 var candidateTools = new ITool[]
 {
-    breakSymptomKb ? new BrokenSymptomTool() : new SymptomKnowledgeBaseTool(knowledgeBase),
+    breakSymptomKb ? new BrokenSymptomTool() : new SymptomKnowledgeBaseTool(CareTriageDomain.DefaultKnowledgeBase()),
 };
 
-var redFlagRules = new[]
-{
-    new RedFlagRule(
-        Id: "cardiac",
-        AllOf: new[] { "chest pain", "shortness of breath" },
-        Message: "🚨 Possible cardiac emergency — call your local emergency number / go to the ER now."),
-};
+var redFlagRules = CareTriageDomain.DefaultRedFlagRules();
 
 var session = new CareTriageSession(config, candidateTools, redFlagRules, conversationId: "cli-session");
 
@@ -136,16 +119,4 @@ static void PrintTrace(TraceNode node, int depth)
     {
         PrintTrace(child, depth + 1);
     }
-}
-
-// A tool that always fails, simulating a missing data file. Used by --break-symptom-kb to show the
-// runtime's retry -> degrade -> safe-fallback behavior live.
-internal sealed class BrokenSymptomTool : ITool
-{
-    public string Name => "symptom_kb";
-    public string Description => "Symptom KB (simulated failure).";
-    public JsonElement InputSchema { get; } = JsonDocument.Parse("""{"type":"object"}""").RootElement.Clone();
-
-    public Task<ToolResult> ExecuteAsync(JsonElement args, WorkContext ctx, CancellationToken ct) =>
-        throw new InvalidOperationException("symptom KB data file is missing");
 }
