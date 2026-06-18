@@ -1,9 +1,8 @@
 using System.Text.Json;
 using AgentRuntime.Config;
 using AgentRuntime.Context;
-using AgentRuntime.Failure;
-using AgentRuntime.Orchestration;
 using AgentRuntime.Tools;
+using CareTriageAgent;
 using CareTriageAgent.Config;
 using CareTriageAgent.Guardrails;
 using CareTriageAgent.Tools;
@@ -71,37 +70,28 @@ var knowledgeBase = new[]
     new SymptomEntry("breathing_difficulty", new[] { "shortness of breath", "trouble breathing", "can't breathe" }, BaseSeverity: 8, SelfCareAdvice: "Difficulty breathing needs prompt assessment."),
 };
 
-// Tools are registered only if the effective config enables them (a flight can switch them off).
-var toolList = new List<ITool>();
-if (config.IsToolEnabled("symptom_kb"))
+// Candidate tools and red-flag rules are domain data. CareTriageSession filters tools by config and
+// registers the guardrail unconditionally (the safety invariant), wiring everything from config.
+var candidateTools = new ITool[]
 {
-    toolList.Add(breakSymptomKb ? new BrokenSymptomTool() : new SymptomKnowledgeBaseTool(knowledgeBase));
-}
-
-var tools = new ToolRegistry(toolList);
-
-var guardrails = new IGuardrail[]
-{
-    new RedFlagGuardrail(new[]
-    {
-        new RedFlagRule(
-            Id: "cardiac",
-            AllOf: new[] { "chest pain", "shortness of breath" },
-            Message: "🚨 Possible cardiac emergency — call your local emergency number / go to the ER now."),
-    }),
+    breakSymptomKb ? new BrokenSymptomTool() : new SymptomKnowledgeBaseTool(knowledgeBase),
 };
 
-var policy = new TriagePolicy(new TriageThresholds(
-    config.Triage.SelfCareMaxScore, config.Triage.SeeGpMaxScore, config.Triage.UrgentCareMaxScore));
-var scope = new ExecutionScope(config.Resilience.ToolMaxRetries);
-var orchestrator = new AgentOrchestrator(new MockTriagePlanner(policy), tools, guardrails, scope);
-var ctx = new WorkContext(conversationId: "cli-session");
+var redFlagRules = new[]
+{
+    new RedFlagRule(
+        Id: "cardiac",
+        AllOf: new[] { "chest pain", "shortness of breath" },
+        Message: "🚨 Possible cardiac emergency — call your local emergency number / go to the ER now."),
+};
+
+var session = new CareTriageSession(config, candidateTools, redFlagRules, conversationId: "cli-session");
 
 var banner = activeFlights.Count > 0 ? $"   [flights: {string.Join(", ", activeFlights)}]" : "";
 banner += breakSymptomKb ? "   [--break-symptom-kb]" : "";
 Console.WriteLine($"> {message}{banner}");
 
-var turn = await orchestrator.RunTurnAsync(ctx, message, CancellationToken.None);
+var turn = await session.OnUserMessageAsync(message, CancellationToken.None);
 
 Console.WriteLine();
 Console.WriteLine($"Agent: {turn.Message}");
