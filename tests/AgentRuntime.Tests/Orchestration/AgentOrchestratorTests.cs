@@ -75,4 +75,31 @@ public class AgentOrchestratorTests
             p => p.PlanNextStepAsync(It.IsAny<WorkContext>(), It.IsAny<IReadOnlyList<ToolDescriptor>>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
+
+    // Slice 4 (step budget): a planner that never finishes must not loop forever. The orchestrator
+    // stops at its step budget and returns a safe degraded fallback instead of hanging or crashing.
+    [Fact]
+    public async Task Planner_that_never_finishes_stops_at_step_budget_with_degraded_fallback()
+    {
+        var tool = new FakeTool("loop_tool", outputJson: """{"x":1}""");
+        var registry = new ToolRegistry(new ITool[] { tool });
+
+        // Always calls the tool, never returns Finish.
+        var planner = new Mock<ILlmClient>();
+        planner
+            .Setup(p => p.PlanNextStepAsync(
+                It.IsAny<WorkContext>(),
+                It.IsAny<IReadOnlyList<ToolDescriptor>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PlanDecision.CallTool("loop_tool", default));
+
+        var orchestrator = new AgentOrchestrator(planner.Object, registry);
+        var ctx = new WorkContext("conv-1");
+
+        var result = await orchestrator.RunTurnAsync(ctx, "go in circles", CancellationToken.None);
+
+        Assert.True(result.Degraded);
+        // Bounded: the tool ran exactly the step-budget number of times, never unbounded.
+        Assert.Equal(AgentOrchestrator.MaxSteps, tool.CallCount);
+    }
 }
