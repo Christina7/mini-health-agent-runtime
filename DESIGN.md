@@ -1,32 +1,32 @@
-# Plan: Build a runnable mini "Agent Runtime" demo for your GitHub (health triage)
+# Design: a runnable mini "Agent Runtime" (health triage)
 
 ## Context
 
-Your resume (`resume-ai-en.md`, `resume-general-en.md`, `Yu_Jing_Resume_Revised.md`) centers on backend work for a large-scale **enterprise AI agent platform** — specifically its **production agent runtime**: agent orchestration, config-driven execution (RuntimeConfig + JSON-Patch flights), a failure-handling framework (`CompliantException` / `FailureMode` / `DegradedResponse`), the **Work Context Provider** (cross-turn cacheability), and **OpenTelemetry-based** distributed tracing — all in C#/.NET 8. Those are strong claims, but a recruiter can't see the production code (it's internal).
+This is a small, open-source **agent runtime** that reproduces, in miniature, the core architecture of a production AI agent platform: agent orchestration, config-driven execution (RuntimeConfig + JSON-Patch flights), a failure-handling framework (`CompliantException` / `FailureMode` / degraded responses), a work-context store (cross-turn cacheability), and **OpenTelemetry-based** distributed tracing — all in C#/.NET 8.
 
-This project turns those bullets into a **public, runnable artifact**: a small open-source *agent runtime* that reproduces the same architectural concepts in miniature, with a health **symptom-triage & care-navigation** agent built on top, and a **browser-based chat UI** as the demo surface. Healthcare is chosen deliberately — it makes safety guardrails and graceful degradation (the exact reliability themes on your resume) load-bearing and demonstrable. The repo's README explicitly bridges each runtime concept to the production system you built, so the demo *proves* the resume instead of just asserting it.
+A health **symptom-triage & care-navigation** agent is built on top as the sample domain. Healthcare is chosen deliberately — it makes safety guardrails and graceful degradation load-bearing and demonstrable. The runtime is domain-agnostic; all health specifics live in the sample app.
 
-**The demo is a web page, not a CLI.** A thin **ASP.NET Core minimal-API** host serves a single self-contained `index.html` chat page and exposes `POST /triage`; the **`AgentRuntime` orchestrator runs server-side in C#** (the whole point — the runtime *is* the showcase; no agent logic leaks into JavaScript). The page renders the conversation **and a live per-turn trace tree** (conversation → agent step → tool calls, with latency and a `degraded` tag) so the OpenTelemetry observability bullet is *visually* demonstrable, not just asserted in console text. A thin CLI scenario-runner is retained for deterministic `--scenario` replay and CI.
+**Surfaces.** Milestone 1 ships a CLI host (deterministic, offline). Milestone 2 adds a thin **ASP.NET Core minimal-API** host serving a single self-contained `index.html` chat page that exposes `POST /triage`; the **`AgentRuntime` orchestrator runs server-side in C#** (no agent logic leaks into JavaScript). The page renders the conversation **and a live per-turn trace tree** (conversation → agent step → tool calls, with latency and a `degraded` tag), so the observability is visually demonstrable, not just asserted in console text.
 
-**Decisions already made:** C#/.NET 8 (mirrors your stack); pluggable LLM with a deterministic **mock provider as the default** so `dotnet run` works with zero keys, plus an optional real Claude provider; use case = **symptom triage & care navigation**, framed strictly as an educational/navigation tool with "not medical advice" disclaimers and a red-flag emergency-escalation guardrail (never a diagnostic system).
+**Decisions made:** C#/.NET 8; pluggable LLM with a deterministic **mock provider as the default** so `dotnet run` works with zero keys, plus an optional real Claude provider; use case = **symptom triage & care navigation**, framed strictly as an educational/navigation tool with "not medical advice" disclaimers and a red-flag emergency-escalation guardrail (never a diagnostic system).
 
-Repo name (already created on GitHub): **`mini-health-agent-runtime`**. Runtime library assembly: **`AgentRuntime`**; sample app: **`CareTriageAgent`**. (The earlier working name `mini-agent-runtime` is superseded — use `mini-health-agent-runtime` consistently in the README, the `.sln`, and namespaces.)
+Runtime library assembly: **`AgentRuntime`**; sample app: **`CareTriageAgent`**.
 
 ## Goal
 
 A `dotnet build && dotnet test && dotnet run` repo where:
-- A **reusable agent-runtime library** implements orchestration, config/flights, tools, failure modes, work context, and tracing — each component mapped 1:1 to a resume bullet.
+- A **reusable agent-runtime library** implements orchestration, config/flights, tools, failure modes, work context, and tracing — each component a self-contained, real agent-platform concern.
 - A **CareTriageAgent.Web** ASP.NET host serves a browser chat UI and runs the runtime server-side, conducting a multi-turn triage session on deterministic mock data (so it runs offline), optionally backed by the real Claude API. The page visualizes the per-turn OpenTelemetry trace tree.
 - A **CareTriageAgent.Cli** thin scenario-runner replays scripted transcripts non-interactively for deterministic verification and CI.
-- **Tests + GitHub Actions CI** (unit + a `WebApplicationFactory` integration test against `POST /triage`) prove it works and showcase your testing/reliability skills.
-- A **README** ties every concept back to your production agent-runtime work.
+- **Tests + GitHub Actions CI** (unit + a `WebApplicationFactory` integration test against `POST /triage`) prove it works.
+- A **README** documents the architecture and a concept→file map.
 
 ## Repository layout
 
 ```
 mini-health-agent-runtime/
 ├─ src/
-│  ├─ AgentRuntime/                  # the reusable, DOMAIN-AGNOSTIC runtime library (the resume showcase)
+│  ├─ AgentRuntime/                  # the reusable, DOMAIN-AGNOSTIC runtime library (the core)
 │  │  ├─ Orchestration/             # AgentOrchestrator (reason→act→observe loop), IGuardrail hook
 │  │  ├─ Tools/                     # ITool, ToolRegistry, tool-selection strategy
 │  │  ├─ Config/                    # RuntimeConfig, RuntimeConfigProvider, JSON-Patch flights
@@ -52,14 +52,14 @@ mini-health-agent-runtime/
 ├─ tests/CareTriageAgent.Web.Tests/  # WebApplicationFactory integration test against POST /triage
 ├─ .github/workflows/ci.yml          # dotnet build + test
 ├─ MiniHealthAgentRuntime.sln
-├─ LICENSE                            # MIT — expected for a public portfolio repo
-├─ README.md                         # what it is, quickstart (screenshot/GIF), resume-bridge mapping table
+├─ LICENSE                            # MIT — standard for a public repo
+├─ README.md                         # what it is, quickstart (screenshot/GIF), concept→file mapping table
 └─ ARCHITECTURE.md                   # deep-dive: each component, file location, data flow, how to debug
 ```
 
 > **Why a `CareTriageAgent` class library + two thin hosts:** the health domain (guardrails, tools, triage, planner, data) is shared by both the web host and the CLI runner. Neither host contains agent logic — the Web host marshals HTTP↔runtime; the CLI host feeds a scripted transcript. This keeps the "runtime, not a script" separation honest and makes the integration test trivial.
 
-## Core runtime components (each maps to a resume bullet)
+## Core runtime components
 
 1. **Orchestration / agent loop — `Orchestration/AgentOrchestrator.cs`**
    Implements the multi-step reason→act→observe loop: ask `ILlmClient` for the next step → either call a tool (`ITool`) or emit the final answer → feed the observation back → repeat until done or a max-step budget is hit. Reproduces "core agent orchestration runtime… multi-step agent workflows (agent chain / tool calls / decision loops)."
@@ -149,7 +149,7 @@ public interface IWorkContextProvider {                   // cross-turn cacheabi
     Task<JsonElement> ProvideAsync(WorkContext ctx, CancellationToken ct);
 }
 ```
-The runtime memoizes provider output by `ComputeCacheKey` (TTL from config) so a repeated query across turns skips recomputation — the "cross-turn cacheability for query-dependent providers" bullet.
+The runtime memoizes provider output by `ComputeCacheKey` (TTL from config) so a repeated query across turns skips recomputation — cross-turn cacheability for query-dependent providers.
 
 ### Guardrail hook — `Orchestration/` (domain-agnostic)
 A generic pre-planning hook the orchestrator runs every turn before any LLM/tool work. Red-flag detection is the *health implementation* of this interface, registered by the app — the runtime itself knows nothing about chest pain.
@@ -269,7 +269,7 @@ POST /triage                → drives one turn through CareTriageSession.OnUser
 ### Browser UI — `wwwroot/index.html`
 A single self-contained page (vanilla HTML/CSS/JS, **no npm/build step** — important: the repo stays "clone & `dotnet run`"). Two panes:
 - **Chat pane:** message history, an input box, the final triage card (urgency badge color-coded by level, recommended action, care-navigation, always-visible disclaimer).
-- **Trace pane:** renders the `trace` tree from each response as a collapsible tree / mini latency timeline, with red-flag and `degraded` spans highlighted — this is the visual proof of the OpenTelemetry bullet.
+- **Trace pane:** renders the `trace` tree from each response as a collapsible tree / mini latency timeline, with red-flag and `degraded` spans highlighted — the visual proof of the OpenTelemetry tracing.
 - **Demo controls:** a small toolbar to flip provider (mock/anthropic) and toggle the `break-clinic-finder` flight, so a viewer can trigger the **degraded** and **red-flag** flows live without editing files.
 
 ## CareTriageAgent (the runnable demo)
@@ -319,8 +319,8 @@ Agent: ...I couldn't verify nearby clinics right now; consult your provider dire
 
 De-risk completion by building in vertical slices; each milestone leaves a green, demonstrable repo even if a later one slips.
 
-1. **Runtime + domain + mock + CLI + tests (the proof).** `AgentRuntime`, the `CareTriageAgent` domain (guardrails, tools, `ClinicDirectoryProvider`, mock planner, data), the thin `CareTriageAgent.Cli` scenario-runner, the full xUnit suite, and GitHub Actions CI. **This milestone alone proves every resume bullet headlessly and offline** — no browser, no key.
-2. **Web host + browser trace UI (the hero image).** `CareTriageAgent.Web` + `wwwroot/index.html` chat and trace-tree panel — the recruiter-facing surface and README screenshot/GIF.
+1. **Runtime + domain + mock + CLI + tests (the proof).** `AgentRuntime`, the `CareTriageAgent` domain (guardrails, tools, `ClinicDirectoryProvider`, mock planner, data), the thin `CareTriageAgent.Cli` scenario-runner, the full xUnit suite, and GitHub Actions CI. **This milestone alone exercises every runtime component headlessly and offline** — no browser, no key.
+2. **Web host + browser trace UI (the lead image).** `CareTriageAgent.Web` + `wwwroot/index.html` chat and trace-tree panel — the browser surface and README screenshot/GIF.
 3. **Optional live providers.** `AnthropicLlmClient` (and, if desired, the pluggable open-model provider in Future stages). Strictly additive; the mock remains the default.
 
 ## Dependencies & how to run
@@ -361,26 +361,26 @@ $env:ANTHROPIC_API_KEY="sk-..."; dotnet run --project src/CareTriageAgent.Web   
 11. **Scenario replay (CLI)** — `--scenario red-flag.txt` deterministically yields `Emergency` (guards the end-to-end path).
 12. **Web integration (`tests/CareTriageAgent.Web.Tests/`)** — `WebApplicationFactory` boots the host in-memory; `POST /triage` with a cardiac message returns 200 with `triage.urgency == "Emergency"` and a non-empty `trace` tree; a second `POST` reusing the same `conversationId` shows the prior turn was remembered (multi-turn `WorkContext` over HTTP).
 
-`.github/workflows/ci.yml`: `dotnet restore/build/test` on push — a green badge on a resume repo.
+`.github/workflows/ci.yml`: `dotnet restore/build/test` on push — a green badge on the repo.
 
-## README (the resume bridge — most important artifact)
+## README (the most important artifact)
 
 - One-paragraph "what this is and why," with the **not-medical-advice** disclaimer up front.
-- A **screenshot / GIF** of the browser chat UI with the trace tree visible (the demo's hero image — recruiters skim images).
+- A **screenshot / GIF** of the browser chat UI with the trace tree visible (the demo's lead image).
 - A mermaid architecture diagram of the runtime (and where the web host sits relative to it).
-- A **mapping table**: *Resume concept → file/namespace in this repo → the production system it mirrors* (e.g., `RuntimeConfigProvider` → the production RuntimeConfig + JSON-Patch flights; `Failure/` → CompliantException/FailureMode/DegradedResponse; `Context/` → Work Context Provider; `Observability/` → production OpenTelemetry tracing).
+- A **mapping table**: *concept → file/namespace in this repo → the agent-platform concern it mirrors* (e.g., `RuntimeConfigProvider` → RuntimeConfig + JSON-Patch flights; `Failure/` → CompliantException/FailureMode/degraded responses; `Context/` → Work Context Provider; `Observability/` → OpenTelemetry tracing).
 - Quickstart: `dotnet run --project src/CareTriageAgent.Web` → open the browser; plus the CLI scenario-runner one-liner.
 - "Enable the real Claude model" section (set `ANTHROPIC_API_KEY`, pick `anthropic` in the toolbar).
 
 ## ARCHITECTURE.md (deep-dive doc — for learning & debugging)
 
 A separate `ARCHITECTURE.md`, written so you (and a reader) can learn and debug the runtime. It opens with the **hosting model** (domain-agnostic `AgentRuntime` ← `CareTriageAgent` domain library ← thin `*.Web` / `*.Cli` hosts) and a request walk-through for `POST /triage` (HTTP → `CareTriageSession` → orchestrator → response with serialized trace → browser render). Then, for each of the seven runtime components it gives:
-- **What it does** and the production concept it mirrors.
+- **What it does** and the agent-platform concept it mirrors.
 - **Where it lives** — exact file/namespace (e.g. `src/AgentRuntime/Config/RuntimeConfigProvider.cs`) and the key type/method.
 - **Data flow** — a numbered walk-through of one full turn: user input → `WorkContext` update → red-flag guardrail → planner (`ILlmClient`) → tool selection → `ExecutionScope.TryExecute` (retry/fallback/degrade) → `TriageResult` → trace emission.
 - **How to debug it** — which span to read in the trace tree, how to force a `DegradedResponse` (break a tool via a flight), how to flip config without recompiling, and what each test in `AgentRuntime.Tests` pins down.
 
-This is the portfolio/learning artifact; the README stays a quickstart + resume-bridge table and links to it.
+This is the learning/reference artifact; the README stays a quickstart + concept→file table and links to it.
 
 ## Verification
 
