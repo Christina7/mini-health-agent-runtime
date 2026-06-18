@@ -1,25 +1,63 @@
 using System.Text.Json;
+using AgentRuntime.Config;
 using AgentRuntime.Context;
 using AgentRuntime.Failure;
 using AgentRuntime.Orchestration;
 using AgentRuntime.Tools;
+using CareTriageAgent.Config;
 using CareTriageAgent.Guardrails;
 using CareTriageAgent.Tools;
 using CareTriageAgent.Triage;
 
 // CLI host: drives the real CareTriageAgent brain through the runtime orchestrator on deterministic,
-// offline data. The red-flag guardrail runs first; otherwise the MockTriagePlanner scores symptoms
-// via the KB tool and classifies urgency with TriagePolicy. Tool calls run through an ExecutionScope,
-// so --break-symptom-kb makes the tool fail and the turn degrades to a safe answer instead of crashing.
+// offline data. Behavior is config-driven: a base runtimeconfig.json plus allow-listed JSON-Patch
+// flights (config/flights/*.json) decide thresholds, retries, and which tools are enabled — all
+// changeable with --flight and no recompile. The red-flag guardrail always runs first.
 //
-// Usage: dotnet run --project src/CareTriageAgent.Cli -- [--break-symptom-kb] <symptom text>
+// Usage: dotnet run --project src/CareTriageAgent.Cli -- [--flight <name>]... [--break-symptom-kb] <symptom text>
 
-var flags = args.Where(a => a.StartsWith("--", StringComparison.Ordinal)).ToHashSet();
-var messageParts = args.Where(a => !a.StartsWith("--", StringComparison.Ordinal)).ToArray();
-var breakSymptomKb = flags.Contains("--break-symptom-kb");
-var message = messageParts.Length > 0
+var activeFlights = new List<string>();
+var messageParts = new List<string>();
+var breakSymptomKb = false;
+for (var i = 0; i < args.Length; i++)
+{
+    switch (args[i])
+    {
+        case "--flight" when i + 1 < args.Length:
+            activeFlights.Add(args[++i]);
+            break;
+        case "--break-symptom-kb":
+            breakSymptomKb = true;
+            break;
+        default:
+            messageParts.Add(args[i]);
+            break;
+    }
+}
+
+var message = messageParts.Count > 0
     ? string.Join(' ', messageParts)
     : "sore throat and mild fever since yesterday";
+
+// Load base config + allow-listed flights from disk, then resolve the effective config.
+var configDir = Path.Combine(AppContext.BaseDirectory, "config");
+var baseJson = File.ReadAllText(Path.Combine(configDir, "runtimeconfig.json"));
+var flightsDir = Path.Combine(configDir, "flights");
+var flights = Directory.Exists(flightsDir)
+    ? Directory.GetFiles(flightsDir, "*.json").ToDictionary(Path.GetFileNameWithoutExtension, File.ReadAllText)
+    : new Dictionary<string, string>();
+
+CareTriageConfig config;
+try
+{
+    config = new RuntimeConfigProvider(baseJson, flights).Resolve<CareTriageConfig>(activeFlights.ToArray());
+}
+catch (ArgumentException ex)
+{
+    Console.Error.WriteLine($"Config error: {ex.Message}");
+    Console.Error.WriteLine($"Available flights: {string.Join(", ", flights.Keys.OrderBy(k => k))}");
+    return 1;
+}
 
 var knowledgeBase = new[]
 {
@@ -33,11 +71,14 @@ var knowledgeBase = new[]
     new SymptomEntry("breathing_difficulty", new[] { "shortness of breath", "trouble breathing", "can't breathe" }, BaseSeverity: 8, SelfCareAdvice: "Difficulty breathing needs prompt assessment."),
 };
 
-ITool symptomTool = breakSymptomKb
-    ? new BrokenSymptomTool()
-    : new SymptomKnowledgeBaseTool(knowledgeBase);
+// Tools are registered only if the effective config enables them (a flight can switch them off).
+var toolList = new List<ITool>();
+if (config.IsToolEnabled("symptom_kb"))
+{
+    toolList.Add(breakSymptomKb ? new BrokenSymptomTool() : new SymptomKnowledgeBaseTool(knowledgeBase));
+}
 
-var tools = new ToolRegistry(new[] { symptomTool });
+var tools = new ToolRegistry(toolList);
 
 var guardrails = new IGuardrail[]
 {
@@ -50,12 +91,16 @@ var guardrails = new IGuardrail[]
     }),
 };
 
-var policy = new TriagePolicy(new TriageThresholds(SelfCareMaxScore: 2, SeeGpMaxScore: 5, UrgentCareMaxScore: 8));
-var scope = new ExecutionScope(maxRetries: 2);
+var policy = new TriagePolicy(new TriageThresholds(
+    config.Triage.SelfCareMaxScore, config.Triage.SeeGpMaxScore, config.Triage.UrgentCareMaxScore));
+var scope = new ExecutionScope(config.Resilience.ToolMaxRetries);
 var orchestrator = new AgentOrchestrator(new MockTriagePlanner(policy), tools, guardrails, scope);
 var ctx = new WorkContext(conversationId: "cli-session");
 
-Console.WriteLine($"> {message}{(breakSymptomKb ? "   [--break-symptom-kb]" : "")}");
+var banner = activeFlights.Count > 0 ? $"   [flights: {string.Join(", ", activeFlights)}]" : "";
+banner += breakSymptomKb ? "   [--break-symptom-kb]" : "";
+Console.WriteLine($"> {message}{banner}");
+
 var turn = await orchestrator.RunTurnAsync(ctx, message, CancellationToken.None);
 
 Console.WriteLine();
@@ -68,7 +113,7 @@ if (turn.Result is { } resultJson)
     Console.WriteLine("  ┌─ Triage ─────────────────────────────");
     Console.WriteLine($"  │ Urgency:     {triage.Urgency}");
     Console.WriteLine($"  │ Action:      {triage.RecommendedAction}");
-    Console.WriteLine($"  │ Tools used:  {string.Join(", ", triage.ToolsInvoked)}");
+    Console.WriteLine($"  │ Tools used:  {(triage.ToolsInvoked.Count > 0 ? string.Join(", ", triage.ToolsInvoked) : "(none)")}");
     if (triage.Degraded)
     {
         Console.WriteLine("  │ Status:      ⚠ DEGRADED (a tool failed; fell back to a safe answer)");
@@ -80,6 +125,8 @@ else
 {
     Console.WriteLine("        ⚠ Educational only — not medical advice.");
 }
+
+return 0;
 
 // A tool that always fails, simulating a missing data file. Used by --break-symptom-kb to show the
 // runtime's retry -> degrade -> safe-fallback behavior live.
