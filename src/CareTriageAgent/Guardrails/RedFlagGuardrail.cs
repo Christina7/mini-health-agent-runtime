@@ -26,7 +26,7 @@ public sealed class RedFlagGuardrail : IGuardrail
 
     public Task<GuardrailVerdict> EvaluateAsync(WorkContext ctx, CancellationToken ct)
     {
-        var text = LatestUserText(ctx);
+        var text = ctx.LatestUserText;
 
         foreach (var rule in _rules)
         {
@@ -38,18 +38,5 @@ public sealed class RedFlagGuardrail : IGuardrail
         }
 
         return Task.FromResult(GuardrailVerdict.Pass);
-    }
-
-    private static string LatestUserText(WorkContext ctx)
-    {
-        for (var i = ctx.History.Count - 1; i >= 0; i--)
-        {
-            if (ctx.History[i].Role == TurnRole.User)
-            {
-                return ctx.History[i].Text;
-            }
-        }
-
-        return string.Empty;
     }
 }

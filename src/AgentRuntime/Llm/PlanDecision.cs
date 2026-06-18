@@ -14,6 +14,9 @@ public abstract record PlanDecision
     /// <summary>Run the named tool with <paramref name="Args"/>, then observe and plan again.</summary>
     public sealed record CallTool(string ToolName, JsonElement Args) : PlanDecision;
 
-    /// <summary>End the turn and reply to the user with <paramref name="Message"/>.</summary>
-    public sealed record Finish(string Message) : PlanDecision;
+    /// <summary>
+    /// End the turn and reply with <paramref name="Message"/>. <paramref name="Result"/> is an
+    /// optional structured payload (JSON) the app deserializes into its own result type.
+    /// </summary>
+    public sealed record Finish(string Message, JsonElement? Result = null) : PlanDecision;
 }
