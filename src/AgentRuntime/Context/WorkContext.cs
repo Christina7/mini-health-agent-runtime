@@ -45,6 +45,17 @@ public sealed class WorkContext
         }
     }
 
+    /// <summary>
+    /// Resets the per-turn working state at the start of a new turn: the observations gathered during
+    /// the act -> observe loop and the degraded flag. Cross-turn memory (<see cref="History"/>) is
+    /// preserved, so a follow-up is triaged against its own symptoms, not the previous turn's.
+    /// </summary>
+    internal void BeginTurn()
+    {
+        _observations.Clear();
+        Degraded = false;
+    }
+
     public void AppendUser(string text) => _history.Add(new Turn(TurnRole.User, text));
 
     public void AppendAgent(string text) => _history.Add(new Turn(TurnRole.Agent, text));

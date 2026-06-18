@@ -5,56 +5,291 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Care Triage — mini agent runtime</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
-    h1 { font-size: 1.3rem; }
-    .row { display: flex; gap: .5rem; margin: 1rem 0; }
-    input[type=text] { flex: 1; padding: .5rem; font-size: 1rem; }
-    button { padding: .5rem 1rem; font-size: 1rem; cursor: pointer; }
-    pre { background: #f5f5f5; padding: 1rem; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; }
-    .reply { font-weight: 600; }
-    .disclaimer { color: #666; font-size: .85rem; }
+    :root {
+      --bg: #fafafa; --panel: #fff; --line: #e2e2e2; --ink: #1a1a1a; --muted: #6b7280;
+      --user: #e8eefc; --agent: #f3f4f6;
+      --selfcare-bg: #e8f5e9; --selfcare-fg: #2e7d32;
+      --seegp-bg: #e3f2fd; --seegp-fg: #1565c0;
+      --urgentcare-bg: #fff3e0; --urgentcare-fg: #e65100;
+      --emergency-bg: #ffebee; --emergency-fg: #c62828;
+      --degraded-bg: #fff8e1; --degraded-fg: #b26a00;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; background: var(--bg); color: var(--ink); line-height: 1.45; }
+    header { padding: 1rem 1.25rem .75rem; border-bottom: 1px solid var(--line); background: var(--panel); }
+    header h1 { font-size: 1.15rem; margin: 0; }
+    header .disclaimer { color: var(--muted); font-size: .82rem; }
+
+    .toolbar { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: .6rem 1.25rem;
+               border-bottom: 1px solid var(--line); background: var(--panel); font-size: .85rem; }
+    .toolbar label { display: inline-flex; align-items: center; gap: .35rem; cursor: pointer; }
+    .toolbar .group { display: inline-flex; gap: .9rem; align-items: center; padding-right: 1rem; border-right: 1px solid var(--line); }
+    .toolbar .group:last-child { border-right: none; }
+    .toolbar .meta { color: var(--muted); margin-left: auto; }
+    .toolbar button { font-size: .8rem; padding: .3rem .6rem; cursor: pointer; }
+    .toolbar .disclaimer { color: var(--muted); font-size: .78rem; }
+
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: calc(100vh - 138px); }
+    @media (max-width: 800px) { main { grid-template-columns: 1fr; height: auto; } }
+
+    .pane { display: flex; flex-direction: column; min-height: 0; }
+    .pane > h2 { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+                 margin: 0; padding: .6rem 1.25rem; border-bottom: 1px solid var(--line); background: var(--panel); }
+    #chat { border-right: 1px solid var(--line); }
+    .scroll { flex: 1; overflow-y: auto; padding: 1rem 1.25rem; }
+
+    .msg { margin: 0 0 .9rem; max-width: 85%; padding: .55rem .8rem; border-radius: 10px; white-space: pre-wrap; }
+    .msg.user { background: var(--user); margin-left: auto; }
+    .msg.agent { background: var(--agent); }
+    .msg.system { background: transparent; color: var(--muted); font-size: .8rem; text-align: center; max-width: 100%; padding: .2rem; }
+    .msg.emergency { background: var(--emergency-bg); color: var(--emergency-fg); font-weight: 600; }
+
+    .card { border: 1px solid var(--line); border-radius: 10px; margin: 0 0 .9rem; overflow: hidden; max-width: 85%; }
+    .card .badge-row { display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; font-weight: 600; }
+    .card .badge { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; padding: .15rem .5rem; border-radius: 999px; }
+    .card .body { padding: .25rem .75rem .6rem; }
+    .card .body .action { font-weight: 600; }
+    .card .body .advice { color: #333; }
+    .card .tools { color: var(--muted); font-size: .8rem; margin-top: .35rem; }
+    .card .disclaimer { color: var(--muted); font-size: .78rem; padding: .4rem .75rem; border-top: 1px solid var(--line); }
+    .card.selfcare .badge-row { background: var(--selfcare-bg); color: var(--selfcare-fg); } .card.selfcare .badge { background: var(--selfcare-fg); color: #fff; }
+    .card.seegp .badge-row { background: var(--seegp-bg); color: var(--seegp-fg); } .card.seegp .badge { background: var(--seegp-fg); color: #fff; }
+    .card.urgentcare .badge-row { background: var(--urgentcare-bg); color: var(--urgentcare-fg); } .card.urgentcare .badge { background: var(--urgentcare-fg); color: #fff; }
+    .card.emergency .badge-row { background: var(--emergency-bg); color: var(--emergency-fg); } .card.emergency .badge { background: var(--emergency-fg); color: #fff; }
+    .card .degraded-tag { font-size: .72rem; background: var(--degraded-bg); color: var(--degraded-fg); padding: .15rem .5rem; border-radius: 999px; }
+
+    .composer { display: flex; gap: .5rem; padding: .75rem 1.25rem; border-top: 1px solid var(--line); background: var(--panel); }
+    .composer input { flex: 1; padding: .55rem .7rem; font-size: 1rem; border: 1px solid var(--line); border-radius: 8px; }
+    .composer button { padding: .55rem 1.1rem; font-size: 1rem; border: none; border-radius: 8px; background: #1565c0; color: #fff; cursor: pointer; }
+    .composer button:disabled { opacity: .5; cursor: default; }
+
+    /* Trace tree */
+    #trace .scroll { font: .82rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .node { margin: 0; }
+    .node > .row { display: flex; align-items: center; gap: .5rem; padding: .12rem 0; }
+    .node .caret { width: 1rem; color: var(--muted); cursor: pointer; user-select: none; flex: none; text-align: center; }
+    .node .caret.leaf { cursor: default; visibility: hidden; }
+    .node .name { flex: none; }
+    .node .bar-wrap { flex: 1; height: 7px; background: #eee; border-radius: 4px; overflow: hidden; min-width: 40px; }
+    .node .bar { height: 100%; background: #90caf9; }
+    .node .dur { color: var(--muted); flex: none; min-width: 64px; text-align: right; }
+    .node .children { margin-left: 1rem; border-left: 1px dotted var(--line); padding-left: .5rem; }
+    .node.collapsed > .children { display: none; }
+    .node.guardrail .name { color: var(--urgentcare-fg); }
+    .node.tool .name { color: var(--seegp-fg); }
+    .node.degraded .name { color: var(--emergency-fg); font-weight: 600; }
+    .node.degraded .bar { background: var(--emergency-fg); }
+    .trace-empty { color: var(--muted); }
   </style>
 </head>
 <body>
-  <h1>Care Triage <span class="disclaimer">— educational only, not medical advice</span></h1>
-  <p class="disclaimer">Try: <em>"sore throat and mild fever"</em> or <em>"severe chest pain and shortness of breath"</em>.</p>
+  <header>
+    <h1>Care Triage <span class="disclaimer">— a runnable mini agent runtime · educational only, not medical advice</span></h1>
+  </header>
 
-  <div class="row">
-    <input type="text" id="message" placeholder="Describe your symptoms…" autofocus />
-    <button id="send">Send</button>
+  <div class="toolbar">
+    <div class="group"><strong>Demo controls:</strong></div>
+    <div class="group">
+      <label><input type="checkbox" data-break /> Break symptom KB <span class="disclaimer">(force tool failure → degrade)</span></label>
+    </div>
+    <div class="group" id="flight-toggles"></div>
+    <div class="group"><button id="reset">New conversation</button></div>
+    <span class="meta" id="meta">no conversation yet</span>
   </div>
 
-  <p class="reply" id="reply"></p>
-  <pre id="output" hidden></pre>
+  <main>
+    <section class="pane" id="chat">
+      <h2>Conversation</h2>
+      <div class="scroll" id="messages">
+        <p class="msg system">Try <em>"sore throat and mild fever"</em>, <em>"dizzy with abdominal pain"</em>, or <em>"severe chest pain and shortness of breath"</em>.</p>
+      </div>
+      <div class="composer">
+        <input type="text" id="message" placeholder="Describe your symptoms…" autofocus autocomplete="off" />
+        <button id="send">Send</button>
+      </div>
+    </section>
+
+    <section class="pane" id="trace">
+      <h2>Trace — last turn</h2>
+      <div class="scroll" id="tracetree">
+        <p class="trace-empty">The OpenTelemetry trace tree for each turn renders here.</p>
+      </div>
+    </section>
+  </main>
 
   <script>
-    // Slice 1 is a deliberately bare page that proves the POST /triage round-trip end to end.
-    // Slice 2 replaces this with the color-coded triage card + the rendered trace tree.
+    const AVAILABLE_FLIGHTS = ['strict-thresholds', 'disable-symptom-kb'];
+    const messagesEl = document.getElementById('messages');
+    const traceEl = document.getElementById('tracetree');
+    const inputEl = document.getElementById('message');
+    const sendEl = document.getElementById('send');
+    const metaEl = document.getElementById('meta');
+    const breakEl = document.querySelector('input[data-break]');
+    const flightTogglesEl = document.getElementById('flight-toggles');
+
     let conversationId = null;
+    let turnCount = 0;
 
-    async function send() {
-      const input = document.getElementById('message');
-      const message = input.value.trim();
-      if (!message) return;
-
-      const res = await fetch('/triage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversationId, message }),
-      });
-      const data = await res.json();
-      conversationId = data.conversationId;
-
-      document.getElementById('reply').textContent = data.reply ?? '';
-      const output = document.getElementById('output');
-      output.hidden = false;
-      output.textContent = JSON.stringify({ triage: data.triage, trace: data.trace, turnCount: data.turnCount }, null, 2);
-      input.value = '';
-      input.focus();
+    // Build the flight toggles from the allow-listed set the host exposes.
+    for (const name of AVAILABLE_FLIGHTS) {
+      const label = document.createElement('label');
+      label.innerHTML = `<input type="checkbox" data-flight="${name}" /> ${name}`;
+      flightTogglesEl.appendChild(label);
     }
 
-    document.getElementById('send').addEventListener('click', send);
-    document.getElementById('message').addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+    // Changing any runtime setting starts a fresh conversation — the server fixes a conversation's
+    // config when its session is created, so new settings need a new session to take effect.
+    function onSettingChanged() {
+      if (conversationId !== null) {
+        addSystem('Settings changed — started a new conversation.');
+      }
+      conversationId = null;
+      turnCount = 0;
+      updateMeta();
+    }
+    breakEl.addEventListener('change', onSettingChanged);
+    document.querySelectorAll('input[data-flight]').forEach(el => el.addEventListener('change', onSettingChanged));
+    document.getElementById('reset').addEventListener('click', () => { onSettingChanged(); inputEl.focus(); });
+
+    function currentFlights() {
+      return Array.from(document.querySelectorAll('input[data-flight]:checked')).map(el => el.dataset.flight);
+    }
+
+    function updateMeta() {
+      const id = conversationId ? conversationId.slice(0, 8) : '—';
+      metaEl.textContent = `conversation ${id} · turn ${turnCount}`;
+    }
+
+    function scrollChat() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+
+    function addMessage(text, cls) {
+      const p = document.createElement('p');
+      p.className = `msg ${cls}`;
+      p.textContent = text;
+      messagesEl.appendChild(p);
+      scrollChat();
+      return p;
+    }
+    function addSystem(text) { addMessage(text, 'system'); }
+
+    function renderCard(triage, reply) {
+      const urgency = triage.urgency; // SelfCare | SeeGp | UrgentCare | Emergency
+      const cls = urgency.toLowerCase();
+      const card = document.createElement('div');
+      card.className = `card ${cls}`;
+      const degraded = triage.degraded
+        ? `<span class="degraded-tag">⚠ degraded — a tool failed; safe fallback</span>` : '';
+      const tools = (triage.toolsInvoked && triage.toolsInvoked.length)
+        ? triage.toolsInvoked.join(', ') : '(none)';
+      card.innerHTML = `
+        <div class="badge-row"><span class="badge">${escapeHtml(urgency)}</span>${degraded}</div>
+        <div class="body">
+          <div class="action">${escapeHtml(triage.recommendedAction || reply)}</div>
+          ${triage.advice ? `<div class="advice">${escapeHtml(triage.advice)}</div>` : ''}
+          <div class="tools">Tools invoked: ${escapeHtml(tools)}</div>
+        </div>
+        <div class="disclaimer">${escapeHtml(triage.disclaimer || 'Educational only — not medical advice.')}</div>`;
+      messagesEl.appendChild(card);
+      scrollChat();
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    // Recursive collapsible trace tree with a latency bar scaled to the root duration.
+    function renderTrace(node) {
+      traceEl.innerHTML = '';
+      if (!node) { traceEl.innerHTML = '<p class="trace-empty">No trace for this turn.</p>'; return; }
+      traceEl.appendChild(buildNode(node, node.durationMs || 1));
+    }
+
+    function buildNode(node, rootDuration) {
+      const wrap = document.createElement('div');
+      let cls = 'node';
+      if (node.degraded) cls += ' degraded';
+      else if (node.name.startsWith('tool:')) cls += ' tool';
+      else if (node.name === 'guardrail') cls += ' guardrail';
+      wrap.className = cls;
+
+      const hasChildren = node.children && node.children.length;
+      const pct = Math.max(2, Math.min(100, (node.durationMs / rootDuration) * 100));
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `
+        <span class="caret ${hasChildren ? '' : 'leaf'}">▾</span>
+        <span class="name">${escapeHtml(node.name)}${node.degraded ? ' ⚠' : ''}</span>
+        <span class="bar-wrap"><span class="bar" style="width:${pct}%"></span></span>
+        <span class="dur">${node.durationMs.toFixed(2)} ms</span>`;
+      wrap.appendChild(row);
+
+      if (hasChildren) {
+        const kids = document.createElement('div');
+        kids.className = 'children';
+        for (const child of node.children) kids.appendChild(buildNode(child, rootDuration));
+        wrap.appendChild(kids);
+        const caret = row.querySelector('.caret');
+        caret.addEventListener('click', () => {
+          wrap.classList.toggle('collapsed');
+          caret.textContent = wrap.classList.contains('collapsed') ? '▸' : '▾';
+        });
+      }
+      return wrap;
+    }
+
+    async function send() {
+      const message = inputEl.value.trim();
+      if (!message) return;
+      sendEl.disabled = true;
+      addMessage(message, 'user');
+      inputEl.value = '';
+
+      try {
+        const res = await fetch('/triage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversationId,
+            message,
+            flights: currentFlights(),
+            breakSymptomKb: breakEl.checked,
+          }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          addMessage(`⚠ ${err.error || ('Request failed (' + res.status + ')')}`, 'system');
+          return;
+        }
+
+        const data = await res.json();
+        conversationId = data.conversationId;
+        turnCount = data.turnCount;
+        updateMeta();
+
+        const isEmergency = (data.triage && data.triage.urgency === 'Emergency')
+          || (!data.triage && /emergency/i.test(data.reply || ''));
+
+        if (data.triage) {
+          // A structured triage result → render the color-coded card.
+          renderCard(data.triage, data.reply);
+        } else {
+          // No structured result (red-flag short-circuit or a follow-up question) → plain reply.
+          addMessage(data.reply, isEmergency ? 'emergency' : 'agent');
+        }
+
+        renderTrace(data.trace);
+      } catch (e) {
+        addMessage(`⚠ Network error: ${e.message}`, 'system');
+      } finally {
+        sendEl.disabled = false;
+        inputEl.focus();
+      }
+    }
+
+    sendEl.addEventListener('click', send);
+    inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+    updateMeta();
   </script>
 </body>
 </html>

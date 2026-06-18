@@ -59,6 +59,9 @@ public sealed class AgentOrchestrator
 
     private async Task<TurnResult> ExecuteTurnAsync(WorkContext ctx, string userMessage, CancellationToken ct)
     {
+        // Clear the previous turn's working state (observations + degraded flag) so this turn is
+        // assessed on its own merits; conversation History carries over for multi-turn memory.
+        ctx.BeginTurn();
         ctx.AppendUser(userMessage);
 
         // Guardrail pipeline: runs before any planning, every turn. A short-circuit ends the turn.
