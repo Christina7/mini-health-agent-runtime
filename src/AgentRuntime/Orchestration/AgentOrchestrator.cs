@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using AgentRuntime.Context;
 using AgentRuntime.Failure;
 using AgentRuntime.Llm;
+using AgentRuntime.Observability;
 using AgentRuntime.Tools;
 
 namespace AgentRuntime.Orchestration;
@@ -9,7 +11,8 @@ namespace AgentRuntime.Orchestration;
 /// The core agent loop. Appends the user message to the <see cref="WorkContext"/>, then repeats
 /// plan -> act -> observe: ask the planner for the next step, either run a tool (recording its
 /// result as an observation) or finish. Tool execution goes through an <see cref="ExecutionScope"/>
-/// so a failing tool degrades the turn instead of throwing. Config-driven step budgets arrive later.
+/// so a failing tool degrades the turn instead of throwing. Every turn emits a trace tree
+/// (triage.turn -> guardrail / agent.step -> tool) captured for observability.
 /// </summary>
 public sealed class AgentOrchestrator
 {
@@ -35,12 +38,36 @@ public sealed class AgentOrchestrator
 
     public async Task<TurnResult> RunTurnAsync(WorkContext ctx, string userMessage, CancellationToken ct)
     {
+        using var collector = new TraceCollector();
+
+        TurnResult result;
+        var traceId = default(ActivityTraceId);
+        using (var turnActivity = RuntimeActivitySource.Source.StartActivity("triage.turn"))
+        {
+            if (turnActivity is not null)
+            {
+                traceId = turnActivity.TraceId;
+            }
+
+            result = await ExecuteTurnAsync(ctx, userMessage, ct);
+            turnActivity?.SetTag("degraded", result.Degraded);
+        }
+
+        var trace = traceId == default ? null : collector.BuildTree(traceId);
+        return result with { Trace = trace };
+    }
+
+    private async Task<TurnResult> ExecuteTurnAsync(WorkContext ctx, string userMessage, CancellationToken ct)
+    {
         ctx.AppendUser(userMessage);
 
         // Guardrail pipeline: runs before any planning, every turn. A short-circuit ends the turn.
         foreach (var guardrail in _guardrails)
         {
+            using var guardrailActivity = RuntimeActivitySource.Source.StartActivity("guardrail");
             var verdict = await guardrail.EvaluateAsync(ctx, ct);
+            guardrailActivity?.SetTag("shortCircuit", verdict.ShortCircuit);
+
             if (verdict.ShortCircuit)
             {
                 var message = verdict.Message ?? string.Empty;
@@ -51,6 +78,7 @@ public sealed class AgentOrchestrator
 
         for (var step = 1; step <= MaxSteps; step++)
         {
+            using var stepActivity = RuntimeActivitySource.Source.StartActivity("agent.step");
             var decision = await _planner.PlanNextStepAsync(ctx, _tools.Descriptors(), ct);
 
             switch (decision)
@@ -65,23 +93,28 @@ public sealed class AgentOrchestrator
                         throw new InvalidOperationException($"Unknown tool: {call.ToolName}");
                     }
 
-                    // Run the tool through the resilience policy: a failure here can impact the
-                    // response, so it retries then degrades to a safe "tool unavailable" observation.
-                    var scopeResult = await _scope.TryExecuteAsync(
-                        $"tool:{call.ToolName}",
-                        FailureMode.CanImpactResponse,
-                        c => tool.ExecuteAsync(call.Args, ctx, c),
-                        fallback: () => new ToolResult(Success: false, Output: default, Error: "tool unavailable"),
-                        ct);
-
-                    if (scopeResult.Degraded)
+                    using (var toolActivity = RuntimeActivitySource.Source.StartActivity($"tool:{call.ToolName}"))
                     {
-                        ctx.Degraded = true;
+                        // A tool failure can impact the response: retry, then degrade to a safe observation.
+                        var scopeResult = await _scope.TryExecuteAsync(
+                            $"tool:{call.ToolName}",
+                            FailureMode.CanImpactResponse,
+                            c => tool.ExecuteAsync(call.Args, ctx, c),
+                            fallback: () => new ToolResult(Success: false, Output: default, Error: "tool unavailable"),
+                            ct);
+
+                        toolActivity?.SetTag("degraded", scopeResult.Degraded);
+
+                        if (scopeResult.Degraded)
+                        {
+                            ctx.Degraded = true;
+                        }
+
+                        var observation = scopeResult.Value
+                            ?? new ToolResult(Success: false, Output: default, Error: "tool unavailable");
+                        ctx.RecordObservation(call.ToolName, observation);
                     }
 
-                    var observation = scopeResult.Value
-                        ?? new ToolResult(Success: false, Output: default, Error: "tool unavailable");
-                    ctx.RecordObservation(call.ToolName, observation);
                     break;
 
                 default:

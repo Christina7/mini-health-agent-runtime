@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AgentRuntime.Config;
 using AgentRuntime.Context;
+using AgentRuntime.Observability;
 using AgentRuntime.Tools;
 using CareTriageAgent;
 using CareTriageAgent.Config;
@@ -116,7 +117,26 @@ else
     Console.WriteLine("        ⚠ Educational only — not medical advice.");
 }
 
+if (turn.Trace is { } trace)
+{
+    Console.WriteLine();
+    Console.WriteLine("[trace]");
+    PrintTrace(trace, 0);
+}
+
 return 0;
+
+static void PrintTrace(TraceNode node, int depth)
+{
+    var pad = new string(' ', depth * 2);
+    var branch = depth == 0 ? "" : "└ ";
+    var degraded = node.Degraded ? "  ⚠ degraded" : "";
+    Console.WriteLine($"  {pad}{branch}{node.Name}  ({node.DurationMs:F2} ms){degraded}");
+    foreach (var child in node.Children)
+    {
+        PrintTrace(child, depth + 1);
+    }
+}
 
 // A tool that always fails, simulating a missing data file. Used by --break-symptom-kb to show the
 // runtime's retry -> degrade -> safe-fallback behavior live.
