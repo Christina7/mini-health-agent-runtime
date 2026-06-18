@@ -5,114 +5,229 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Care Triage — mini agent runtime</title>
   <style>
+    /* Design tokens — spacing & type scales and the shadow recipe follow Refactoring UI
+       (Adam Wathan / Steve Schoger): a non-linear spacing scale, hand-picked type scale, hierarchy
+       by weight + 3 grays (not size), borders replaced by background + layered vertical-offset shadow,
+       one accent plus semantic urgency colors. Self-contained — no web fonts, no build step. */
     :root {
-      --bg: #fafafa; --panel: #fff; --line: #e2e2e2; --ink: #1a1a1a; --muted: #6b7280;
-      --user: #e8eefc; --agent: #f3f4f6;
-      --selfcare-bg: #e8f5e9; --selfcare-fg: #2e7d32;
-      --seegp-bg: #e3f2fd; --seegp-fg: #1565c0;
-      --urgentcare-bg: #fff3e0; --urgentcare-fg: #e65100;
-      --emergency-bg: #ffebee; --emergency-fg: #c62828;
-      --degraded-bg: #fff8e1; --degraded-fg: #b26a00;
+      /* grays (slate) — primary text is dark, not pure black */
+      --g-0: #f7f8fa; --g-50: #f1f5f9; --g-100: #e8edf3; --g-150: #dde4ec;
+      --g-200: #cbd5e1; --g-400: #94a3b8; --g-500: #64748b; --g-600: #475569;
+      --g-700: #334155; --g-900: #111a2b;
+      --ink: var(--g-900); --muted: var(--g-500); --faint: var(--g-400);
+
+      /* one accent */
+      --accent: #4f46e5; --accent-600: #4338ca; --accent-50: #eef2ff; --accent-ring: #c7d2fe;
+
+      /* semantic urgency (soft bg / strong fg / accent line) */
+      --selfcare-bg: #ecfdf5; --selfcare-fg: #047857; --selfcare-line: #10b981;
+      --seegp-bg: #eff6ff; --seegp-fg: #1d4ed8; --seegp-line: #3b82f6;
+      --urgentcare-bg: #fff7ed; --urgentcare-fg: #c2410c; --urgentcare-line: #f97316;
+      --emergency-bg: #fef2f2; --emergency-fg: #b91c1c; --emergency-line: #ef4444;
+      --degraded-bg: #fffbeb; --degraded-fg: #b45309; --degraded-line: #f59e0b;
+
+      /* spacing scale */
+      --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+      /* type scale */
+      --t-xs: 12px; --t-sm: 13px; --t-base: 15px; --t-md: 16px; --t-lg: 18px; --t-xl: 22px;
+      /* radius */
+      --r-sm: 6px; --r: 10px; --r-lg: 14px; --r-pill: 999px;
+      /* layered, vertical-offset shadows */
+      --sh-sm: 0 1px 2px rgba(15,23,42,.06), 0 1px 1px rgba(15,23,42,.05);
+      --sh-md: 0 2px 4px rgba(15,23,42,.05), 0 6px 16px rgba(15,23,42,.08);
+      --sh-lg: 0 4px 8px rgba(15,23,42,.06), 0 16px 32px rgba(15,23,42,.12);
+
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Menlo, Consolas, monospace;
     }
     * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; background: var(--bg); color: var(--ink); line-height: 1.45; }
-    header { padding: 1rem 1.25rem .75rem; border-bottom: 1px solid var(--line); background: var(--panel); }
-    header h1 { font-size: 1.15rem; margin: 0; }
-    header .disclaimer { color: var(--muted); font-size: .82rem; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; font-family: var(--font); font-size: var(--t-base); color: var(--ink);
+      background: var(--g-0); line-height: 1.5; display: flex; flex-direction: column; overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
 
-    .toolbar { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; padding: .6rem 1.25rem;
-               border-bottom: 1px solid var(--line); background: var(--panel); font-size: .85rem; }
-    .toolbar label { display: inline-flex; align-items: center; gap: .35rem; cursor: pointer; }
-    .toolbar .group { display: inline-flex; gap: .9rem; align-items: center; padding-right: 1rem; border-right: 1px solid var(--line); }
-    .toolbar .group:last-child { border-right: none; }
-    .toolbar .meta { color: var(--muted); margin-left: auto; }
-    .toolbar button { font-size: .8rem; padding: .3rem .6rem; cursor: pointer; }
-    .toolbar .disclaimer { color: var(--muted); font-size: .78rem; }
+    /* ── App bar ───────────────────────────────────────────── */
+    .appbar {
+      display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s5);
+      background: #fff; box-shadow: var(--sh-sm); z-index: 3;
+    }
+    .brand { display: flex; align-items: center; gap: var(--s3); margin-right: auto; }
+    .brand .mark {
+      width: 34px; height: 34px; border-radius: var(--r); display: grid; place-items: center;
+      background: linear-gradient(135deg, var(--accent), #7c6cf0); color: #fff; box-shadow: var(--sh-sm);
+    }
+    .brand .title { font-size: var(--t-lg); font-weight: 700; letter-spacing: -.01em; }
+    .brand .sub { font-size: var(--t-xs); color: var(--muted); font-weight: 500; }
+    .pill {
+      display: inline-flex; align-items: center; gap: var(--s1); font-size: var(--t-xs); font-weight: 600;
+      padding: var(--s1) var(--s3); border-radius: var(--r-pill); background: var(--g-50); color: var(--g-600);
+    }
+    .pill.warn { background: var(--degraded-bg); color: var(--degraded-fg); }
 
-    main { display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: calc(100vh - 138px); }
-    @media (max-width: 800px) { main { grid-template-columns: 1fr; height: auto; } }
+    /* ── Toolbar ───────────────────────────────────────────── */
+    .toolbar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2);
+      padding: var(--s2) var(--s5); background: var(--g-50); box-shadow: inset 0 -1px 0 var(--g-100); z-index: 2;
+    }
+    .toolbar .label { font-size: var(--t-xs); font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--faint); margin-right: var(--s1); }
+    /* checkbox styled as a toggle chip */
+    .chip-toggle { display: inline-flex; align-items: center; gap: var(--s2); cursor: pointer;
+      font-size: var(--t-sm); font-weight: 500; color: var(--g-600);
+      padding: var(--s1) var(--s3); border-radius: var(--r-pill); background: #fff; box-shadow: var(--sh-sm);
+      transition: background .12s, color .12s, box-shadow .12s; user-select: none; }
+    .chip-toggle:hover { color: var(--ink); }
+    .chip-toggle input { accent-color: var(--accent); margin: 0; }
+    .chip-toggle:has(input:checked) { background: var(--accent-50); color: var(--accent-600); box-shadow: inset 0 0 0 1px var(--accent-ring); }
+    .chip-toggle code { font-family: var(--mono); font-size: var(--t-xs); }
+    .btn-ghost { font: inherit; font-size: var(--t-sm); font-weight: 600; color: var(--g-600); cursor: pointer;
+      padding: var(--s1) var(--s3); border-radius: var(--r-pill); background: #fff; border: none; box-shadow: var(--sh-sm);
+      transition: color .12s, box-shadow .12s; }
+    .btn-ghost:hover { color: var(--ink); box-shadow: var(--sh-md); }
+    .toolbar .meta { margin-left: auto; font-size: var(--t-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
 
-    .pane { display: flex; flex-direction: column; min-height: 0; }
-    .pane > h2 { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
-                 margin: 0; padding: .6rem 1.25rem; border-bottom: 1px solid var(--line); background: var(--panel); }
-    #chat { border-right: 1px solid var(--line); }
-    .scroll { flex: 1; overflow-y: auto; padding: 1rem 1.25rem; }
+    /* ── Main two-pane shell (fills the viewport) ──────────── */
+    main { flex: 1; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); min-height: 0; }
+    @media (max-width: 860px) { main { grid-template-columns: 1fr; } #trace { display: none; } }
+    .pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+    #chat { background: var(--g-0); box-shadow: 1px 0 0 var(--g-100); }
+    #trace { background: #fff; }
+    .pane-head { display: flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s5);
+      font-size: var(--t-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+    .pane-head .dot { width: 7px; height: 7px; border-radius: var(--r-pill); background: var(--g-200); }
+    .scroll { flex: 1; overflow-y: auto; padding: var(--s4) var(--s5) var(--s5); }
+    .scroll::-webkit-scrollbar { width: 10px; }
+    .scroll::-webkit-scrollbar-thumb { background: var(--g-150); border-radius: var(--r-pill); border: 3px solid transparent; background-clip: content-box; }
 
-    .msg { margin: 0 0 .9rem; max-width: 85%; padding: .55rem .8rem; border-radius: 10px; white-space: pre-wrap; }
-    .msg.user { background: var(--user); margin-left: auto; }
-    .msg.agent { background: var(--agent); }
-    .msg.system { background: transparent; color: var(--muted); font-size: .8rem; text-align: center; max-width: 100%; padding: .2rem; }
-    .msg.emergency { background: var(--emergency-bg); color: var(--emergency-fg); font-weight: 600; }
+    /* ── Messages ──────────────────────────────────────────── */
+    .msg { max-width: 86%; margin-bottom: var(--s4); padding: var(--s3) var(--s4); border-radius: var(--r-lg);
+      white-space: pre-wrap; font-size: var(--t-base); }
+    .msg.user { margin-left: auto; background: var(--accent); color: #fff; border-bottom-right-radius: var(--s1);
+      box-shadow: var(--sh-sm); }
+    .msg.agent { background: #fff; color: var(--g-700); box-shadow: var(--sh-sm); border-bottom-left-radius: var(--s1); }
+    .msg.system { max-width: 100%; text-align: center; background: none; color: var(--muted); font-size: var(--t-sm); padding: var(--s2); }
+    .msg.emergency { background: var(--emergency-bg); color: var(--emergency-fg); font-weight: 600;
+      box-shadow: inset 0 0 0 1px var(--emergency-line); }
 
-    .card { border: 1px solid var(--line); border-radius: 10px; margin: 0 0 .9rem; overflow: hidden; max-width: 85%; }
-    .card .badge-row { display: flex; align-items: center; gap: .5rem; padding: .5rem .75rem; font-weight: 600; }
-    .card .badge { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; padding: .15rem .5rem; border-radius: 999px; }
-    .card .body { padding: .25rem .75rem .6rem; }
-    .card .body .action { font-weight: 600; }
-    .card .body .advice { color: #333; }
-    .card .tools { color: var(--muted); font-size: .8rem; margin-top: .35rem; }
-    .card .disclaimer { color: var(--muted); font-size: .78rem; padding: .4rem .75rem; border-top: 1px solid var(--line); }
-    .card.selfcare .badge-row { background: var(--selfcare-bg); color: var(--selfcare-fg); } .card.selfcare .badge { background: var(--selfcare-fg); color: #fff; }
-    .card.seegp .badge-row { background: var(--seegp-bg); color: var(--seegp-fg); } .card.seegp .badge { background: var(--seegp-fg); color: #fff; }
-    .card.urgentcare .badge-row { background: var(--urgentcare-bg); color: var(--urgentcare-fg); } .card.urgentcare .badge { background: var(--urgentcare-fg); color: #fff; }
-    .card.emergency .badge-row { background: var(--emergency-bg); color: var(--emergency-fg); } .card.emergency .badge { background: var(--emergency-fg); color: #fff; }
-    .card .degraded-tag { font-size: .72rem; background: var(--degraded-bg); color: var(--degraded-fg); padding: .15rem .5rem; border-radius: 999px; }
+    /* Triage card — accent top-border by urgency, depth via shadow not borders */
+    .card { max-width: 86%; margin-bottom: var(--s4); background: #fff; border-radius: var(--r-lg);
+      box-shadow: var(--sh-md); overflow: hidden; border-top: 3px solid var(--g-200); }
+    .card .badge-row { display: flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s4) var(--s2); }
+    .badge { font-size: var(--t-xs); font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+      padding: var(--s1) var(--s3); border-radius: var(--r-pill); color: #fff; }
+    .card .body { padding: 0 var(--s4) var(--s3); }
+    .card .action { font-weight: 600; color: var(--ink); }
+    .card .advice { color: var(--g-600); margin-top: var(--s1); font-size: var(--t-sm); }
+    .card .tools { margin-top: var(--s3); font-size: var(--t-xs); color: var(--muted); }
+    .card .tools code { font-family: var(--mono); background: var(--g-50); padding: 1px var(--s1); border-radius: var(--r-sm); }
+    .card .disclaimer { padding: var(--s2) var(--s4); font-size: var(--t-xs); color: var(--muted); background: var(--g-50); }
+    .degraded-tag { font-size: var(--t-xs); font-weight: 600; padding: var(--s1) var(--s2); border-radius: var(--r-pill);
+      background: var(--degraded-bg); color: var(--degraded-fg); }
+    .card.selfcare   { border-top-color: var(--selfcare-line); }   .card.selfcare   .badge { background: var(--selfcare-fg); }
+    .card.seegp      { border-top-color: var(--seegp-line); }      .card.seegp      .badge { background: var(--seegp-fg); }
+    .card.urgentcare { border-top-color: var(--urgentcare-line); } .card.urgentcare .badge { background: var(--urgentcare-fg); }
+    .card.emergency  { border-top-color: var(--emergency-line); }  .card.emergency  .badge { background: var(--emergency-fg); }
 
-    .composer { display: flex; gap: .5rem; padding: .75rem 1.25rem; border-top: 1px solid var(--line); background: var(--panel); }
-    .composer input { flex: 1; padding: .55rem .7rem; font-size: 1rem; border: 1px solid var(--line); border-radius: 8px; }
-    .composer button { padding: .55rem 1.1rem; font-size: 1rem; border: none; border-radius: 8px; background: #1565c0; color: #fff; cursor: pointer; }
-    .composer button:disabled { opacity: .5; cursor: default; }
+    /* Empty / intro state with clickable examples */
+    .intro { color: var(--muted); font-size: var(--t-sm); }
+    .intro p { margin: 0 0 var(--s3); }
+    .chips { display: flex; flex-wrap: wrap; gap: var(--s2); }
+    .chip { font: inherit; font-size: var(--t-sm); cursor: pointer; padding: var(--s2) var(--s3); border-radius: var(--r-pill);
+      background: #fff; color: var(--g-600); border: none; box-shadow: var(--sh-sm); transition: box-shadow .12s, color .12s; }
+    .chip:hover { color: var(--ink); box-shadow: var(--sh-md); }
 
-    /* Trace tree */
-    #trace .scroll { font: .82rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .node { margin: 0; }
-    .node > .row { display: flex; align-items: center; gap: .5rem; padding: .12rem 0; }
-    .node .caret { width: 1rem; color: var(--muted); cursor: pointer; user-select: none; flex: none; text-align: center; }
-    .node .caret.leaf { cursor: default; visibility: hidden; }
-    .node .name { flex: none; }
-    .node .bar-wrap { flex: 1; height: 7px; background: #eee; border-radius: 4px; overflow: hidden; min-width: 40px; }
-    .node .bar { height: 100%; background: #90caf9; }
-    .node .dur { color: var(--muted); flex: none; min-width: 64px; text-align: right; }
-    .node .children { margin-left: 1rem; border-left: 1px dotted var(--line); padding-left: .5rem; }
-    .node.collapsed > .children { display: none; }
-    .node.guardrail .name { color: var(--urgentcare-fg); }
-    .node.tool .name { color: var(--seegp-fg); }
+    /* ── Composer ──────────────────────────────────────────── */
+    .composer { display: flex; gap: var(--s2); padding: var(--s3) var(--s5) var(--s4); background: var(--g-0);
+      box-shadow: 0 -1px 0 var(--g-100); }
+    .composer input { flex: 1; font: inherit; font-size: var(--t-md); padding: var(--s3) var(--s4); color: var(--ink);
+      background: #fff; border: none; border-radius: var(--r-pill); box-shadow: inset 0 0 0 1px var(--g-200); transition: box-shadow .12s; }
+    .composer input::placeholder { color: var(--faint); }
+    .composer input:focus { outline: none; box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-ring); }
+    .composer .send { font: inherit; font-size: var(--t-md); font-weight: 600; color: #fff; cursor: pointer;
+      padding: var(--s3) var(--s5); border: none; border-radius: var(--r-pill);
+      background: linear-gradient(135deg, var(--accent), #6d5cf0); box-shadow: var(--sh-sm); transition: filter .12s, transform .02s; }
+    .composer .send:hover { filter: brightness(1.06); }
+    .composer .send:active { transform: translateY(1px); }
+    .composer .send:disabled { opacity: .55; cursor: default; filter: none; }
+
+    /* ── Trace tree ────────────────────────────────────────── */
+    #trace .scroll { font-family: var(--mono); font-size: var(--t-sm); }
+    .node > .row { display: flex; align-items: center; gap: var(--s2); padding: var(--s1) 0; border-radius: var(--r-sm); }
+    .node > .row:hover { background: var(--g-50); }
+    .caret { width: 16px; flex: none; text-align: center; color: var(--faint); cursor: pointer; user-select: none; }
+    .caret.leaf { visibility: hidden; }
+    .span-pill { font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+      padding: 1px var(--s2); border-radius: var(--r-sm); background: var(--g-100); color: var(--g-600); flex: none; }
+    .node.tool .span-pill { background: var(--seegp-bg); color: var(--seegp-fg); }
+    .node.guardrail .span-pill { background: var(--urgentcare-bg); color: var(--urgentcare-fg); }
+    .node.degraded .span-pill { background: var(--emergency-bg); color: var(--emergency-fg); }
+    .node .name { flex: none; color: var(--g-700); }
     .node.degraded .name { color: var(--emergency-fg); font-weight: 600; }
-    .node.degraded .bar { background: var(--emergency-fg); }
-    .trace-empty { color: var(--muted); }
+    .bar-wrap { flex: 1; min-width: 36px; height: 6px; background: var(--g-100); border-radius: var(--r-pill); overflow: hidden; }
+    .bar { height: 100%; border-radius: var(--r-pill); background: linear-gradient(90deg, #818cf8, var(--accent)); }
+    .node.degraded .bar { background: linear-gradient(90deg, #fca5a5, var(--emergency-line)); }
+    .dur { flex: none; min-width: 62px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .children { margin-left: var(--s4); padding-left: var(--s2); box-shadow: inset 1px 0 0 var(--g-100); }
+    .node.collapsed > .children { display: none; }
+    .trace-empty { display: grid; place-items: center; gap: var(--s3); height: 100%; color: var(--faint); text-align: center; }
+    .trace-empty svg { opacity: .5; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Care Triage <span class="disclaimer">— a runnable mini agent runtime · educational only, not medical advice</span></h1>
-  </header>
+  <div class="appbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12h4l2 5 4-12 2 7h6"/>
+        </svg>
+      </span>
+      <span>
+        <div class="title">Care Triage</div>
+        <div class="sub">a runnable mini agent runtime</div>
+      </span>
+    </div>
+    <span class="pill warn">⚠ Educational only — not medical advice</span>
+  </div>
 
   <div class="toolbar">
-    <div class="group"><strong>Demo controls:</strong></div>
-    <div class="group">
-      <label><input type="checkbox" data-break /> Break symptom KB <span class="disclaimer">(force tool failure → degrade)</span></label>
-    </div>
-    <div class="group" id="flight-toggles"></div>
-    <div class="group"><button id="reset">New conversation</button></div>
+    <span class="label">Demo</span>
+    <label class="chip-toggle"><input type="checkbox" data-break /> Break symptom KB</label>
+    <span id="flight-toggles" style="display:contents"></span>
+    <button class="btn-ghost" id="reset">↻ New conversation</button>
     <span class="meta" id="meta">no conversation yet</span>
   </div>
 
   <main>
     <section class="pane" id="chat">
-      <h2>Conversation</h2>
+      <div class="pane-head"><span class="dot"></span> Conversation</div>
       <div class="scroll" id="messages">
-        <p class="msg system">Try <em>"sore throat and mild fever"</em>, <em>"dizzy with abdominal pain"</em>, or <em>"severe chest pain and shortness of breath"</em>.</p>
+        <div class="intro">
+          <p>Describe symptoms in plain language. The agent runs one triage turn server-side and returns an urgency level plus the full trace tree.</p>
+          <div class="chips">
+            <button class="chip" data-example="sore throat and mild fever">sore throat and mild fever</button>
+            <button class="chip" data-example="dizziness and abdominal pain">dizziness and abdominal pain</button>
+            <button class="chip" data-example="severe chest pain and shortness of breath">severe chest pain and shortness of breath</button>
+          </div>
+        </div>
       </div>
       <div class="composer">
         <input type="text" id="message" placeholder="Describe your symptoms…" autofocus autocomplete="off" />
-        <button id="send">Send</button>
+        <button class="send" id="send">Send</button>
       </div>
     </section>
 
     <section class="pane" id="trace">
-      <h2>Trace — last turn</h2>
+      <div class="pane-head"><span class="dot"></span> Trace · last turn</div>
       <div class="scroll" id="tracetree">
-        <p class="trace-empty">The OpenTelemetry trace tree for each turn renders here.</p>
+        <div class="trace-empty">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+            <path d="M6.5 10v4h7.5M10 17.5h4"/>
+          </svg>
+          <span>The OpenTelemetry trace tree for each turn renders here.</span>
+        </div>
       </div>
     </section>
   </main>
@@ -133,16 +248,15 @@
     // Build the flight toggles from the allow-listed set the host exposes.
     for (const name of AVAILABLE_FLIGHTS) {
       const label = document.createElement('label');
-      label.innerHTML = `<input type="checkbox" data-flight="${name}" /> ${name}`;
+      label.className = 'chip-toggle';
+      label.innerHTML = `<input type="checkbox" data-flight="${name}" /> <code>${name}</code>`;
       flightTogglesEl.appendChild(label);
     }
 
     // Changing any runtime setting starts a fresh conversation — the server fixes a conversation's
     // config when its session is created, so new settings need a new session to take effect.
     function onSettingChanged() {
-      if (conversationId !== null) {
-        addSystem('Settings changed — started a new conversation.');
-      }
+      if (conversationId !== null) addSystem('Settings changed — started a new conversation.');
       conversationId = null;
       turnCount = 0;
       updateMeta();
@@ -150,6 +264,8 @@
     breakEl.addEventListener('change', onSettingChanged);
     document.querySelectorAll('input[data-flight]').forEach(el => el.addEventListener('change', onSettingChanged));
     document.getElementById('reset').addEventListener('click', () => { onSettingChanged(); inputEl.focus(); });
+    document.querySelectorAll('.chip[data-example]').forEach(el =>
+      el.addEventListener('click', () => { inputEl.value = el.dataset.example; send(); }));
 
     function currentFlights() {
       return Array.from(document.querySelectorAll('input[data-flight]:checked')).map(el => el.dataset.flight);
@@ -161,32 +277,32 @@
     }
 
     function scrollChat() { messagesEl.scrollTop = messagesEl.scrollHeight; }
+    function clearIntro() { const i = messagesEl.querySelector('.intro'); if (i) i.remove(); }
 
     function addMessage(text, cls) {
-      const p = document.createElement('p');
-      p.className = `msg ${cls}`;
-      p.textContent = text;
-      messagesEl.appendChild(p);
+      const el = document.createElement('div');
+      el.className = `msg ${cls}`;
+      el.textContent = text;
+      messagesEl.appendChild(el);
       scrollChat();
-      return p;
+      return el;
     }
     function addSystem(text) { addMessage(text, 'system'); }
 
     function renderCard(triage, reply) {
       const urgency = triage.urgency; // SelfCare | SeeGp | UrgentCare | Emergency
-      const cls = urgency.toLowerCase();
       const card = document.createElement('div');
-      card.className = `card ${cls}`;
+      card.className = `card ${urgency.toLowerCase()}`;
       const degraded = triage.degraded
-        ? `<span class="degraded-tag">⚠ degraded — a tool failed; safe fallback</span>` : '';
+        ? `<span class="degraded-tag">⚠ degraded — safe fallback</span>` : '';
       const tools = (triage.toolsInvoked && triage.toolsInvoked.length)
-        ? triage.toolsInvoked.join(', ') : '(none)';
+        ? triage.toolsInvoked.map(t => `<code>${escapeHtml(t)}</code>`).join(' ') : '(none)';
       card.innerHTML = `
         <div class="badge-row"><span class="badge">${escapeHtml(urgency)}</span>${degraded}</div>
         <div class="body">
           <div class="action">${escapeHtml(triage.recommendedAction || reply)}</div>
           ${triage.advice ? `<div class="advice">${escapeHtml(triage.advice)}</div>` : ''}
-          <div class="tools">Tools invoked: ${escapeHtml(tools)}</div>
+          <div class="tools">Tools invoked: ${tools}</div>
         </div>
         <div class="disclaimer">${escapeHtml(triage.disclaimer || 'Educational only — not medical advice.')}</div>`;
       messagesEl.appendChild(card);
@@ -200,25 +316,31 @@
     // Recursive collapsible trace tree with a latency bar scaled to the root duration.
     function renderTrace(node) {
       traceEl.innerHTML = '';
-      if (!node) { traceEl.innerHTML = '<p class="trace-empty">No trace for this turn.</p>'; return; }
+      if (!node) { traceEl.innerHTML = '<div class="trace-empty"><span>No trace for this turn.</span></div>'; return; }
       traceEl.appendChild(buildNode(node, node.durationMs || 1));
     }
 
+    function spanKind(name) {
+      if (name.startsWith('tool:')) return { cls: 'tool', pill: 'tool', label: name.slice(5) };
+      if (name === 'guardrail') return { cls: 'guardrail', pill: 'guard', label: 'guardrail' };
+      if (name === 'agent.step') return { cls: 'step', pill: 'step', label: 'agent.step' };
+      if (name === 'triage.turn') return { cls: 'turn', pill: 'turn', label: 'triage.turn' };
+      return { cls: 'span', pill: 'span', label: name };
+    }
+
     function buildNode(node, rootDuration) {
+      const kind = spanKind(node.name);
       const wrap = document.createElement('div');
-      let cls = 'node';
-      if (node.degraded) cls += ' degraded';
-      else if (node.name.startsWith('tool:')) cls += ' tool';
-      else if (node.name === 'guardrail') cls += ' guardrail';
-      wrap.className = cls;
+      wrap.className = `node ${node.degraded ? 'degraded' : kind.cls}`;
 
       const hasChildren = node.children && node.children.length;
-      const pct = Math.max(2, Math.min(100, (node.durationMs / rootDuration) * 100));
+      const pct = Math.max(3, Math.min(100, (node.durationMs / rootDuration) * 100));
       const row = document.createElement('div');
       row.className = 'row';
       row.innerHTML = `
         <span class="caret ${hasChildren ? '' : 'leaf'}">▾</span>
-        <span class="name">${escapeHtml(node.name)}${node.degraded ? ' ⚠' : ''}</span>
+        <span class="span-pill">${escapeHtml(kind.pill)}</span>
+        <span class="name">${escapeHtml(kind.label)}${node.degraded ? ' ⚠' : ''}</span>
         <span class="bar-wrap"><span class="bar" style="width:${pct}%"></span></span>
         <span class="dur">${node.durationMs.toFixed(2)} ms</span>`;
       wrap.appendChild(row);
@@ -241,6 +363,7 @@
       const message = inputEl.value.trim();
       if (!message) return;
       sendEl.disabled = true;
+      clearIntro();
       addMessage(message, 'user');
       inputEl.value = '';
 
@@ -248,12 +371,7 @@
         const res = await fetch('/triage', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            conversationId,
-            message,
-            flights: currentFlights(),
-            breakSymptomKb: breakEl.checked,
-          }),
+          body: JSON.stringify({ conversationId, message, flights: currentFlights(), breakSymptomKb: breakEl.checked }),
         });
 
         if (!res.ok) {
@@ -270,13 +388,8 @@
         const isEmergency = (data.triage && data.triage.urgency === 'Emergency')
           || (!data.triage && /emergency/i.test(data.reply || ''));
 
-        if (data.triage) {
-          // A structured triage result → render the color-coded card.
-          renderCard(data.triage, data.reply);
-        } else {
-          // No structured result (red-flag short-circuit or a follow-up question) → plain reply.
-          addMessage(data.reply, isEmergency ? 'emergency' : 'agent');
-        }
+        if (data.triage) renderCard(data.triage, data.reply);
+        else addMessage(data.reply, isEmergency ? 'emergency' : 'agent');
 
         renderTrace(data.trace);
       } catch (e) {
