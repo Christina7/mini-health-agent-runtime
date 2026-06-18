@@ -54,12 +54,13 @@ Three behaviours fall out of the architecture, all demonstrable live:
 ## Architecture
 
 `AgentRuntime` is **domain-agnostic** — it has zero health knowledge and could host any agent. All
-health specifics live in `CareTriageAgent`. The CLI is a thin host; the web host (Milestone 2) will
-reuse the exact same composition root.
+health specifics live in `CareTriageAgent`. Two thin hosts — a console CLI and an ASP.NET Core web
+app — reuse the exact same composition root (`CareTriageSession`); neither contains agent logic.
 
 ```mermaid
 flowchart TD
-    CLI[CareTriageAgent.Cli<br/>thin host] --> Session
+    Web[CareTriageAgent.Web<br/>HTTP host] --> Session
+    CLI[CareTriageAgent.Cli<br/>console host] --> Session
     subgraph Domain[CareTriageAgent · health domain]
       Session[CareTriageSession<br/>composition root]
       Session --> RedFlag[RedFlagGuardrail]
@@ -83,13 +84,17 @@ One turn: `OnUserMessage` → **guardrail pipeline** (red-flag runs first, can s
 **plan → act → observe loop** (planner picks the next step; tools run through `ExecutionScope`;
 observations feed back) → **Finish** with a `TriageResult` → trace tree emitted.
 
-> Full design notes — contracts, schemas, control flow, and the Milestone 2 plan — are in [DESIGN.md](DESIGN.md).
+> **Deep dive:** [ARCHITECTURE.md](ARCHITECTURE.md) walks the hosting model, a `POST /triage`
+> request, one full turn, and how to debug each component. Original design notes — contracts,
+> schemas, control flow — are in [DESIGN.md](DESIGN.md).
 
 ---
 
-## How it was built — 12 TDD slices
+## How it was built — TDD slices
 
 Built test-first in vertical slices; each left the repo green and runnable. (Each row = one merged PR.)
+
+**Milestone 1 — the engine** (offline, headless, CLI):
 
 | # | Slice | Contribution | Key types |
 |---|-------|--------------|-----------|
@@ -106,7 +111,15 @@ Built test-first in vertical slices; each left the repo green and runnable. (Eac
 | 11 | Safety invariant | Composition root; **no flight can disable the guardrail** | `CareTriageSession` |
 | 12 | Observability | Per-turn OpenTelemetry trace tree (latency + degraded tag) | `RuntimeActivitySource`, `TraceCollector`, `TraceNode` |
 
-**35 unit + integration tests** pin every behaviour (xUnit + Moq).
+**Milestone 2 — the web app** (same runtime, server-side, with a visual trace tree):
+
+| # | Slice | Contribution | Key types |
+|---|-------|--------------|-----------|
+| 13 | Web host | `POST /triage` over the same `CareTriageSession`; per-conversation session store; `WebApplicationFactory` test | `CareTriageAgent.Web`, `TriageSessionStore`, `CareTriageDomain` |
+| 14 | Browser UI | Color-coded triage card + collapsible trace tree + demo toolbar (no build step). Plus a per-turn state-reset fix surfaced by multi-turn use | `wwwroot/index.html`, `WorkContext.BeginTurn` |
+| 15 | CI | GitHub Actions build + test on every push/PR, green badge | `.github/workflows/ci.yml` |
+
+**41 unit + integration tests** pin every behaviour (xUnit + Moq + `WebApplicationFactory`).
 
 ---
 
@@ -120,7 +133,7 @@ self-contained, navigable piece of the codebase:
 | Agent orchestration | `AgentRuntime/Orchestration/AgentOrchestrator.cs` | Multi-step reason→act→observe loop (tool calls / decision loops) |
 | Config-driven execution + flights | `AgentRuntime/Config/RuntimeConfigProvider.cs` | Base config + JSON-Patch flights — change behavior with no recompile |
 | Failure / degradation framework | `AgentRuntime/Failure/` | `CompliantException` / `FailureMode` / degraded responses; retry→degrade→fallback |
-| Work context store | `AgentRuntime/Context/WorkContext.cs` | Cross-turn state / memory; cacheable providers (Milestone 2) |
+| Work context store | `AgentRuntime/Context/WorkContext.cs` | Cross-turn state / memory (per-conversation `History`, per-turn reset) |
 | Tool selection & invocation | `AgentRuntime/Tools/` | Tool registry + invocation strategy |
 | Distributed tracing | `AgentRuntime/Observability/` | OpenTelemetry spans: agent steps, tool chains, latency breakdown |
 | Safety invariant | `CareTriageAgent/Guardrails/RedFlagGuardrail.cs` + `CareTriageSession.cs` | A guardrail config/flights cannot override |
@@ -147,9 +160,12 @@ self-contained, navigable piece of the codebase:
 
 ```bash
 dotnet build MiniHealthAgentRuntime.sln
-dotnet test                                                                 # 35 passing
+dotnet test                                                                 # 41 passing
 
-# Triage flows (all offline, deterministic)
+# The web app — browser chat UI with a live trace tree (offline, no keys)
+dotnet run --project src/CareTriageAgent.Web                                # then open the printed http://localhost:5xxx
+
+# Triage flows via the CLI (all offline, deterministic)
 dotnet run --project src/CareTriageAgent.Cli -- "sore throat and mild fever"           # SelfCare
 dotnet run --project src/CareTriageAgent.Cli -- "dizziness and abdominal pain"         # UrgentCare
 dotnet run --project src/CareTriageAgent.Cli -- "severe chest pain and shortness of breath"  # 🚨 red-flag
@@ -164,26 +180,38 @@ dotnet run --project src/CareTriageAgent.Cli -- --break-symptom-kb "sore throat"
 
 ---
 
-## Milestone 2 — yes, a web app
+## Milestone 2 — the web app
 
 Milestone 1 (above) is the **engine**: the whole runtime, proven offline, headless, with a CLI
 surface. Milestone 2 turns it into a **browser app** that runs the same runtime server-side and
-*visualizes* the trace tree.
+*visualizes* the trace tree — built, and shipped in the slices above.
 
-Planned, in slices:
+```
+┌ Conversation ───────────────┐ ┌ Trace — last turn ──────────────────┐
+│ › dizziness and abdominal…  │ │ ▾ triage.turn            2.40 ms ▕██▏ │
+│ ┌ UrgentCare ─────────────┐ │ │   ▾ guardrail            0.10 ms ▕▍ │ │
+│ │ Seek urgent care today. │ │ │   ▾ agent.step           1.10 ms ▕█▏ │
+│ │ Tools invoked: symptom… │ │ │     ▾ tool:symptom_kb    0.40 ms ▕▌ │ │
+│ │ Educational only — not… │ │ │   ▾ agent.step           0.30 ms ▕▎ │ │
+│ └─────────────────────────┘ │ └──────────────────────────────────────┘
+```
 
-1. **`CareTriageAgent.Web`** — an ASP.NET Core minimal-API host. `POST /triage` drives the same
-   `CareTriageSession`; `GET /` serves a self-contained `wwwroot/index.html` (vanilla HTML/JS, no
-   build step). A `WebApplicationFactory` integration test covers the endpoint.
-2. **Browser UI** — a chat pane (color-coded triage card + disclaimer) and a **trace pane** that
-   renders the `TraceNode` tree as a collapsible tree / latency timeline, with red-flag and
-   `degraded` spans highlighted. A small toolbar toggles flights and the broken-tool flow live.
-3. **Provider cache** — a clinic-finder tool backed by `IWorkContextProvider` with cross-turn
-   cacheability, so a repeated query shows a **cache-hit span** in the trace (multi-turn over HTTP).
-4. **CI + polish** — GitHub Actions (build + test, green badge), `ARCHITECTURE.md` deep-dive, and a
-   screenshot/GIF of the trace tree as the README lead image.
-5. *(Optional, additive)* a real Claude provider behind config (`ANTHROPIC_API_KEY`) — the mock
-   stays the default so the repo always runs offline.
+> _Run `dotnet run --project src/CareTriageAgent.Web` and open the printed URL to see the live UI._
+<!-- Lead image: capture a screenshot of the browser UI and drop it in, e.g. docs/web-ui.png, then:
+![Care Triage web UI — chat pane + live trace tree](docs/web-ui.png) -->
 
-The runtime itself doesn't change for Milestone 2 — the web host is a thin new surface over the
-same `CareTriageSession`. That separation is the point: it's a **runtime**, not a script.
+The runtime itself doesn't change for the web surface — the host is a thin new layer over the same
+`CareTriageSession`. That separation is the point: it's a **runtime**, not a script. (The one runtime
+edit during M2 was a bug fix: per-turn working state is now reset each turn so follow-ups are
+re-scored.)
+
+### Future / not implemented
+
+Captured here so the architecture leaves room for them; **not built** in the current repo:
+
+- **Provider cache** — a cacheable `IWorkContextProvider` (e.g. a clinic-finder) with query-dependent
+  cross-turn memoization, so a repeated query would show a **cache-hit span** in the trace. The
+  `WorkContext` store is in place; the cacheable-provider mechanism is not.
+- **Real Claude provider** — an `AnthropicLlmClient` behind config (`ANTHROPIC_API_KEY`); the
+  deterministic mock stays the default so the repo always runs offline.
+- **Live hosted URL / streaming / rate-limiting** — see [DESIGN.md](DESIGN.md) → Future stages.
