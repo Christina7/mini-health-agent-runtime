@@ -13,7 +13,7 @@ namespace AgentRuntime.Orchestration;
 public sealed class AgentOrchestrator
 {
     // Config-driven in a later slice; a fixed bound for now so the loop can never run forever.
-    private const int MaxSteps = 6;
+    public const int MaxSteps = 6;
 
     private readonly ILlmClient _planner;
     private readonly ToolRegistry _tools;
