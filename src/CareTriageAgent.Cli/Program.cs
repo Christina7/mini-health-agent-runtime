@@ -44,7 +44,7 @@ var configDir = Path.Combine(AppContext.BaseDirectory, "config");
 var baseJson = File.ReadAllText(Path.Combine(configDir, "runtimeconfig.json"));
 var flightsDir = Path.Combine(configDir, "flights");
 var flights = Directory.Exists(flightsDir)
-    ? Directory.GetFiles(flightsDir, "*.json").ToDictionary(Path.GetFileNameWithoutExtension, File.ReadAllText)
+    ? Directory.GetFiles(flightsDir, "*.json").ToDictionary(f => Path.GetFileNameWithoutExtension(f)!, File.ReadAllText)
     : new Dictionary<string, string>();
 
 CareTriageConfig config;
