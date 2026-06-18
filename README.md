@@ -1,5 +1,7 @@
 # mini-health-agent-runtime
 
+[![CI](https://github.com/Christina7/mini-health-agent-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/Christina7/mini-health-agent-runtime/actions/workflows/ci.yml)
+
 A small, **runnable agent runtime** in C# / .NET 8 — a domain-agnostic orchestration core
 (`AgentRuntime`) with a health **symptom-triage & care-navigation** agent (`CareTriageAgent`) built
 on top. It reproduces, in miniature, the architecture of a production agent platform: a reason →
