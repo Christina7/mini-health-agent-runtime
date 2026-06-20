@@ -119,7 +119,7 @@ Built test-first in vertical slices; each left the repo green and runnable. (Eac
 | 14 | Browser UI | Color-coded triage card + collapsible trace tree + demo toolbar (no build step). Plus a per-turn state-reset fix surfaced by multi-turn use | `wwwroot/index.html`, `WorkContext.BeginTurn` |
 | 15 | CI | GitHub Actions build + test on every push/PR, green badge | `.github/workflows/ci.yml` |
 
-**41 unit + integration tests** pin every behaviour (xUnit + Moq + `WebApplicationFactory`).
+**43 unit + integration tests** pin every behaviour (xUnit + Moq + `WebApplicationFactory`).
 
 ---
 
@@ -160,10 +160,11 @@ self-contained, navigable piece of the codebase:
 
 ```bash
 dotnet build MiniHealthAgentRuntime.sln
-dotnet test                                                                 # 41 passing
+dotnet test                                                                 # 43 passing
 
 # The web app — opens a guided walkthrough at /, the live chat app at /app (offline, no keys)
 dotnet run --project src/CareTriageAgent.Web                                # then open the printed http://localhost:5xxx
+#   press Ctrl+C in this terminal to stop the server
 
 # Triage flows via the CLI (all offline, deterministic)
 dotnet run --project src/CareTriageAgent.Cli -- "sore throat and mild fever"           # SelfCare

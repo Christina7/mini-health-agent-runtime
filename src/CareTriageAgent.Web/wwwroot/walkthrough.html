@@ -257,7 +257,7 @@
     <div class="wrap">
       <div class="kicker">How it was built</div>
       <h2>Test-first, in vertical slices</h2>
-      <p class="section-lede">Each slice left the repo green and runnable; each was one merged PR. 41
+      <p class="section-lede">Each slice left the repo green and runnable; each was one merged PR. 43
         unit + integration tests pin every behavior (xUnit + Moq + WebApplicationFactory), run on CI.</p>
       <div class="timeline" id="timeline"></div>
     </div>
@@ -271,9 +271,10 @@
       <div class="terminal">
 <span class="c"># build &amp; test</span><br>
 <span class="p">$</span> dotnet build MiniHealthAgentRuntime.sln<br>
-<span class="p">$</span> dotnet test <span class="c"># 41 passing</span><br><br>
-<span class="c"># the web app — browser chat UI with a live trace tree</span><br>
-<span class="p">$</span> dotnet run --project src/CareTriageAgent.Web <span class="c"># open the printed http://localhost:5xxx</span><br><br>
+<span class="p">$</span> dotnet test <span class="c"># 43 passing</span><br><br>
+<span class="c"># the web app — walkthrough at /, live chat app at /app</span><br>
+<span class="p">$</span> dotnet run --project src/CareTriageAgent.Web <span class="c"># open the printed http://localhost:5xxx</span><br>
+<span class="c">&nbsp;&nbsp;# press Ctrl+C in this terminal to stop the server</span><br><br>
 <span class="c"># or the CLI — same runtime, deterministic</span><br>
 <span class="p">$</span> dotnet run --project src/CareTriageAgent.Cli -- <span style="color:#fcd34d">"severe chest pain and shortness of breath"</span>
       </div>
