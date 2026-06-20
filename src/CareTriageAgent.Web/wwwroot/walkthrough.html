@@ -175,7 +175,7 @@
       <a class="link hide-sm" href="#concerns">Concerns</a>
       <a class="link hide-sm" href="#demo">See it work</a>
       <a class="link hide-sm" href="#build">How it was built</a>
-      <a class="btn ghost" href="/">Live app →</a>
+      <a class="btn ghost" href="/app" data-live>Live app →</a>
     </div>
   </nav>
 
@@ -188,7 +188,7 @@
         OpenTelemetry tracing — reproduced in miniature. A symptom-triage agent is the sample domain,
         and a browser app visualizes the per-turn trace tree.</p>
       <div class="cta">
-        <a class="btn primary" href="/">Open the live app</a>
+        <a class="btn primary" href="/app" data-live>Open the live app</a>
         <a class="btn ghost" href="https://github.com/Christina7/mini-health-agent-runtime">View on GitHub</a>
       </div>
       <div class="disclaimer">⚠ Educational only — not medical advice. A navigation aid with a hard-coded emergency guardrail, not a diagnostic system.</div>
@@ -257,7 +257,7 @@
     <div class="wrap">
       <div class="kicker">How it was built</div>
       <h2>Test-first, in vertical slices</h2>
-      <p class="section-lede">Each slice left the repo green and runnable; each was one merged PR. 41
+      <p class="section-lede">Each slice left the repo green and runnable; each was one merged PR. 43
         unit + integration tests pin every behavior (xUnit + Moq + WebApplicationFactory), run on CI.</p>
       <div class="timeline" id="timeline"></div>
     </div>
@@ -271,9 +271,10 @@
       <div class="terminal">
 <span class="c"># build &amp; test</span><br>
 <span class="p">$</span> dotnet build MiniHealthAgentRuntime.sln<br>
-<span class="p">$</span> dotnet test <span class="c"># 41 passing</span><br><br>
-<span class="c"># the web app — browser chat UI with a live trace tree</span><br>
-<span class="p">$</span> dotnet run --project src/CareTriageAgent.Web <span class="c"># open the printed http://localhost:5xxx</span><br><br>
+<span class="p">$</span> dotnet test <span class="c"># 43 passing</span><br><br>
+<span class="c"># the web app — walkthrough at /, live chat app at /app</span><br>
+<span class="p">$</span> dotnet run --project src/CareTriageAgent.Web <span class="c"># open the printed http://localhost:5xxx</span><br>
+<span class="c">&nbsp;&nbsp;# press Ctrl+C in this terminal to stop the server</span><br><br>
 <span class="c"># or the CLI — same runtime, deterministic</span><br>
 <span class="p">$</span> dotnet run --project src/CareTriageAgent.Cli -- <span style="color:#fcd34d">"severe chest pain and shortness of breath"</span>
       </div>
@@ -286,7 +287,7 @@
         <a href="https://github.com/Christina7/mini-health-agent-runtime">GitHub</a>
         <a href="https://github.com/Christina7/mini-health-agent-runtime/blob/main/ARCHITECTURE.md">ARCHITECTURE.md</a>
         <a href="https://github.com/Christina7/mini-health-agent-runtime/blob/main/DESIGN.md">DESIGN.md</a>
-        <a href="/">Live app</a>
+        <a href="/app" data-live>Live app</a>
       </div>
       <div>Educational only — not medical advice. Synthetic data; deterministic mock planner by default.</div>
     </div>
@@ -432,6 +433,28 @@
       const row = document.createElement('div'); row.className='slice';
       row.innerHTML = `<div class="n">${n}</div><div class="b">${escapeHtml(label)}</div>`;
       tl.appendChild(row);
+    }
+
+    // ── Offline (file://) guard ────────────────────────────────
+    // This page is fully self-contained, so it renders with no server. But the live app needs the
+    // host running. When opened as a local file, the "live app" links would hit a dead page — so
+    // intercept them and show the run command instead.
+    if (location.protocol === 'file:') {
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:90vw;'+
+        'background:#0f172a;color:#e2e8f0;padding:12px 16px;border-radius:12px;box-shadow:var(--sh-lg);'+
+        'font-size:13px;display:none;align-items:center;gap:12px;z-index:50;';
+      toast.innerHTML = 'The live app needs the host running — &nbsp;<code style="background:#1e293b;color:#6ee7b7">'+
+        'dotnet run --project src/CareTriageAgent.Web</code>&nbsp; then open the printed URL.'+
+        '<button style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:16px">×</button>';
+      document.body.appendChild(toast);
+      let t;
+      toast.querySelector('button').addEventListener('click', () => { toast.style.display = 'none'; });
+      document.querySelectorAll('[data-live]').forEach(a => a.addEventListener('click', e => {
+        e.preventDefault();
+        toast.style.display = 'flex';
+        clearTimeout(t); t = setTimeout(() => { toast.style.display = 'none'; }, 6000);
+      }));
     }
   </script>
 </body>
