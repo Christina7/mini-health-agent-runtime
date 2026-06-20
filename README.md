@@ -57,28 +57,9 @@ Three behaviours fall out of the architecture, all demonstrable live:
 health specifics live in `CareTriageAgent`. Two thin hosts — a console CLI and an ASP.NET Core web
 app — reuse the exact same composition root (`CareTriageSession`); neither contains agent logic.
 
-```mermaid
-flowchart TD
-    Web[CareTriageAgent.Web<br/>HTTP host] --> Session
-    CLI[CareTriageAgent.Cli<br/>console host] --> Session
-    subgraph Domain[CareTriageAgent · health domain]
-      Session[CareTriageSession<br/>composition root]
-      Session --> RedFlag[RedFlagGuardrail]
-      Session --> KB[SymptomKnowledgeBaseTool]
-      Session --> Planner[MockTriagePlanner]
-      Session --> Policy[TriagePolicy]
-    end
-    Session --> Orchestrator
-    subgraph Runtime[AgentRuntime · domain-agnostic]
-      Orchestrator[AgentOrchestrator<br/>reason→act→observe loop]
-      Orchestrator --> Guardrails[IGuardrail pipeline]
-      Orchestrator --> Registry[ToolRegistry / ITool]
-      Orchestrator --> Scope[ExecutionScope<br/>retry→degrade→fallback]
-      Orchestrator --> Ctx[WorkContext]
-      Orchestrator --> Trace[ActivitySource → TraceCollector → TraceNode]
-      Config[RuntimeConfigProvider<br/>base + JSON-Patch flights]
-    end
-```
+![Architecture: two thin hosts converge on one composition root, built on a domain-agnostic core holding the seven runtime concerns](docs/diagrams/architecture.png)
+
+<sub>Source: [`docs/diagrams/architecture.excalidraw`](docs/diagrams/architecture.excalidraw) — editable on [excalidraw.com](https://excalidraw.com).</sub>
 
 One turn: `OnUserMessage` → **guardrail pipeline** (red-flag runs first, can short-circuit) →
 **plan → act → observe loop** (planner picks the next step; tools run through `ExecutionScope`;
