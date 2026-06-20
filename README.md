@@ -162,7 +162,7 @@ self-contained, navigable piece of the codebase:
 dotnet build MiniHealthAgentRuntime.sln
 dotnet test                                                                 # 41 passing
 
-# The web app — browser chat UI with a live trace tree (offline, no keys)
+# The web app — opens a guided walkthrough at /, the live chat app at /app (offline, no keys)
 dotnet run --project src/CareTriageAgent.Web                                # then open the printed http://localhost:5xxx
 
 # Triage flows via the CLI (all offline, deterministic)
@@ -177,6 +177,11 @@ dotnet run --project src/CareTriageAgent.Cli -- --flight disable-symptom-kb "sor
 # Graceful degradation
 dotnet run --project src/CareTriageAgent.Cli -- --break-symptom-kb "sore throat"       # ⚠ degraded, no crash
 ```
+
+> **Just want the tour?** A self-contained **walkthrough page** explains the architecture and replays
+> the four behaviors (with trace trees) — no server needed. Open
+> `src/CareTriageAgent.Web/wwwroot/walkthrough.html` directly in a browser, or run the web app and
+> visit `/` (the live chat app is at `/app`).
 
 ---
 

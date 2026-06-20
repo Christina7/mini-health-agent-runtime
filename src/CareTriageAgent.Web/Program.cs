@@ -54,8 +54,13 @@ CareTriageSession BuildSession(string conversationId, string[]? activeFlights, b
     return new CareTriageSession(config, tools, CareTriageDomain.DefaultRedFlagRules(), conversationId);
 }
 
-app.UseDefaultFiles();
 app.UseStaticFiles();
+
+// The guided walkthrough is the landing page; the live chat app is one click away at /app. (Both
+// files are also reachable by their own names, e.g. /walkthrough.html, via the static middleware.)
+var webRoot = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+app.MapGet("/", () => Results.File(Path.Combine(webRoot, "walkthrough.html"), "text/html"));
+app.MapGet("/app", () => Results.File(Path.Combine(webRoot, "index.html"), "text/html"));
 
 app.MapPost("/triage", async (TriageRequest request, CancellationToken ct) =>
 {
