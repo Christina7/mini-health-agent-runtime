@@ -67,6 +67,10 @@ session → one `OnUserMessageAsync` → print the reply, triage card, and trace
 
 ## One turn through the orchestrator
 
+![One turn: user message → BeginTurn → guardrail (red-flag short-circuits to an emergency reply) → a bounded plan→act→observe loop with a tool through ExecutionScope → Finish with a TriageResult, while the trace tree is emitted throughout](docs/diagrams/one-turn-flow.png)
+
+<sub>Source: [`docs/diagrams/one-turn-flow.excalidraw`](docs/diagrams/one-turn-flow.excalidraw).</sub>
+
 `AgentOrchestrator.RunTurnAsync` (`src/AgentRuntime/Orchestration/AgentOrchestrator.cs`) is the
 canonical loop. In order:
 

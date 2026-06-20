@@ -18,6 +18,9 @@ coverage/
 .DS_Store
 Thumbs.db
 
+# Claude Code local skills / settings (cloned tooling, not project code)
+.claude/
+
 # Personal resume source files — keep local, never publish
 resume-ai-en.md
 resume-general-en.md
