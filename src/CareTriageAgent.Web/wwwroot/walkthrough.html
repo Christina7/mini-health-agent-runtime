@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Care Triage — project walkthrough</title>
+  <style>
+    /* Self-contained walkthrough. Shares the app's design system (Refactoring UI tokens) so the
+       page and the live app feel like one product. No web fonts, no external assets — works offline,
+       opened as a file or served at /walkthrough.html. */
+    :root {
+      --g-0:#f7f8fa; --g-50:#f1f5f9; --g-100:#e8edf3; --g-150:#dde4ec; --g-200:#cbd5e1;
+      --g-400:#94a3b8; --g-500:#64748b; --g-600:#475569; --g-700:#334155; --g-900:#111a2b;
+      --ink:var(--g-900); --muted:var(--g-500); --faint:var(--g-400);
+      --accent:#4f46e5; --accent-600:#4338ca; --accent-50:#eef2ff; --accent-ring:#c7d2fe;
+      --selfcare-bg:#ecfdf5; --selfcare-fg:#047857; --selfcare-line:#10b981;
+      --seegp-bg:#eff6ff; --seegp-fg:#1d4ed8; --seegp-line:#3b82f6;
+      --urgentcare-bg:#fff7ed; --urgentcare-fg:#c2410c; --urgentcare-line:#f97316;
+      --emergency-bg:#fef2f2; --emergency-fg:#b91c1c; --emergency-line:#ef4444;
+      --degraded-bg:#fffbeb; --degraded-fg:#b45309; --degraded-line:#f59e0b;
+      --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px;
+      --t-xs:12px; --t-sm:13px; --t-base:15px; --t-md:16px; --t-lg:18px; --t-xl:22px; --t-2xl:28px; --t-3xl:38px;
+      --r-sm:6px; --r:10px; --r-lg:14px; --r-pill:999px;
+      --sh-sm:0 1px 2px rgba(15,23,42,.06),0 1px 1px rgba(15,23,42,.05);
+      --sh-md:0 2px 4px rgba(15,23,42,.05),0 6px 16px rgba(15,23,42,.08);
+      --sh-lg:0 4px 8px rgba(15,23,42,.06),0 16px 32px rgba(15,23,42,.12);
+      --font:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      --mono:ui-monospace,"Cascadia Code","SFMono-Regular",Menlo,Consolas,monospace;
+    }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; font-family:var(--font); font-size:var(--t-base); color:var(--ink); background:var(--g-0);
+      line-height:1.6; -webkit-font-smoothing:antialiased; }
+    a { color:var(--accent-600); text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    code { font-family:var(--mono); font-size:.92em; background:var(--g-100); padding:1px 5px; border-radius:var(--r-sm); }
+    .wrap { max-width:1000px; margin:0 auto; padding:0 var(--s5); }
+
+    /* ── Nav ── */
+    nav { position:sticky; top:0; z-index:10; background:rgba(255,255,255,.85); backdrop-filter:blur(8px);
+      box-shadow:var(--sh-sm); }
+    nav .wrap { display:flex; align-items:center; gap:var(--s4); height:56px; }
+    .brand { display:flex; align-items:center; gap:var(--s3); margin-right:auto; font-weight:700; }
+    .brand .mark { width:30px; height:30px; border-radius:var(--r); display:grid; place-items:center;
+      background:linear-gradient(135deg,var(--accent),#7c6cf0); color:#fff; box-shadow:var(--sh-sm); }
+    nav a.link { color:var(--g-600); font-size:var(--t-sm); font-weight:600; }
+    nav a.link:hover { color:var(--ink); text-decoration:none; }
+    @media (max-width:720px){ nav a.link.hide-sm { display:none; } }
+    .btn { display:inline-flex; align-items:center; gap:var(--s2); font-weight:600; font-size:var(--t-sm);
+      padding:var(--s2) var(--s4); border-radius:var(--r-pill); cursor:pointer; border:none; }
+    .btn.primary { color:#fff; background:linear-gradient(135deg,var(--accent),#6d5cf0); box-shadow:var(--sh-sm); }
+    .btn.primary:hover { filter:brightness(1.06); text-decoration:none; }
+    .btn.ghost { color:var(--g-700); background:#fff; box-shadow:var(--sh-sm); }
+    .btn.ghost:hover { box-shadow:var(--sh-md); text-decoration:none; }
+
+    /* ── Hero ── */
+    .hero { padding:var(--s8) 0 var(--s7); background:
+      radial-gradient(900px 380px at 70% -10%, var(--accent-50), transparent),
+      linear-gradient(var(--g-0), var(--g-0)); }
+    .hero .eyebrow { display:inline-flex; align-items:center; gap:var(--s2); font-size:var(--t-xs); font-weight:700;
+      letter-spacing:.06em; text-transform:uppercase; color:var(--accent-600); background:var(--accent-50);
+      padding:var(--s1) var(--s3); border-radius:var(--r-pill); }
+    .hero h1 { font-size:var(--t-3xl); line-height:1.12; letter-spacing:-.02em; margin:var(--s4) 0 var(--s3); max-width:18ch; }
+    .hero p.lede { font-size:var(--t-lg); color:var(--g-600); max-width:62ch; margin:0 0 var(--s5); }
+    .hero .cta { display:flex; flex-wrap:wrap; gap:var(--s3); }
+    .disclaimer { margin-top:var(--s5); font-size:var(--t-sm); color:var(--degraded-fg); background:var(--degraded-bg);
+      display:inline-flex; gap:var(--s2); padding:var(--s2) var(--s4); border-radius:var(--r); }
+
+    /* ── Sections ── */
+    section { padding:var(--s7) 0; border-top:1px solid var(--g-100); }
+    .kicker { font-size:var(--t-xs); font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+    h2 { font-size:var(--t-2xl); letter-spacing:-.015em; margin:var(--s2) 0 var(--s3); }
+    .section-lede { color:var(--g-600); max-width:68ch; margin:0 0 var(--s5); }
+
+    /* layering diagram */
+    .stack { display:grid; gap:var(--s3); }
+    .layer { border-radius:var(--r-lg); padding:var(--s4) var(--s5); box-shadow:var(--sh-sm); }
+    .layer .h { font-weight:700; display:flex; align-items:center; gap:var(--s2); }
+    .layer .d { color:var(--g-600); font-size:var(--t-sm); margin-top:var(--s1); }
+    .layer.hosts { background:#fff; }
+    .layer.domain { background:var(--accent-50); margin:0 var(--s6); }
+    .layer.core { background:linear-gradient(135deg,#1e1b4b,#312e81); color:#fff; margin:0 var(--s7); }
+    .layer.core .d { color:#c7d2fe; }
+    .stack .arrow { text-align:center; color:var(--faint); font-size:var(--t-sm); margin:-2px 0; }
+
+    /* concern grid */
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:var(--s4); }
+    .concern { background:#fff; border-radius:var(--r-lg); padding:var(--s4); box-shadow:var(--sh-sm);
+      border-top:3px solid var(--accent); }
+    .concern.future { border-top-color:var(--g-200); opacity:.85; }
+    .concern .t { font-weight:700; display:flex; align-items:center; justify-content:space-between; gap:var(--s2); }
+    .concern .tag { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.03em;
+      padding:1px var(--s2); border-radius:var(--r-pill); background:var(--selfcare-bg); color:var(--selfcare-fg); }
+    .concern.future .tag { background:var(--g-100); color:var(--g-500); }
+    .concern .d { color:var(--g-600); font-size:var(--t-sm); margin:var(--s2) 0; }
+    .concern .f { font-family:var(--mono); font-size:var(--t-xs); color:var(--muted); }
+
+    /* demo player */
+    .tabs { display:flex; flex-wrap:wrap; gap:var(--s2); margin-bottom:var(--s4); }
+    .tab { font:inherit; font-size:var(--t-sm); font-weight:600; cursor:pointer; padding:var(--s2) var(--s4);
+      border-radius:var(--r-pill); background:#fff; color:var(--g-600); border:none; box-shadow:var(--sh-sm); }
+    .tab:hover { color:var(--ink); }
+    .tab.active { background:var(--accent); color:#fff; }
+    .demo { display:grid; grid-template-columns:1fr 1fr; gap:var(--s4); align-items:start; }
+    @media (max-width:760px){ .demo { grid-template-columns:1fr; } }
+    .panel { background:#fff; border-radius:var(--r-lg); box-shadow:var(--sh-md); overflow:hidden; }
+    .panel .ph { font-size:var(--t-xs); font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+      color:var(--faint); padding:var(--s3) var(--s4); box-shadow:inset 0 -1px 0 var(--g-100); }
+    .panel .pb { padding:var(--s4); }
+    .user-msg { margin-left:auto; max-width:90%; width:max-content; background:var(--accent); color:#fff;
+      padding:var(--s2) var(--s3); border-radius:var(--r-lg); border-bottom-right-radius:var(--s1); margin-bottom:var(--s4); }
+
+    /* triage card (matches the app) */
+    .card { border-radius:var(--r); box-shadow:var(--sh-sm); overflow:hidden; border-top:3px solid var(--g-200); }
+    .card .badge-row { display:flex; align-items:center; gap:var(--s2); padding:var(--s3) var(--s4) var(--s2); }
+    .badge { font-size:var(--t-xs); font-weight:700; letter-spacing:.03em; text-transform:uppercase;
+      padding:var(--s1) var(--s3); border-radius:var(--r-pill); color:#fff; }
+    .card .action { font-weight:600; padding:0 var(--s4); }
+    .card .advice { color:var(--g-600); font-size:var(--t-sm); padding:var(--s1) var(--s4) 0; }
+    .card .tools { font-size:var(--t-xs); color:var(--muted); padding:var(--s3) var(--s4) 0; }
+    .card .disc { font-size:var(--t-xs); color:var(--muted); background:var(--g-50); padding:var(--s2) var(--s4); margin-top:var(--s3); }
+    .degraded-tag { font-size:var(--t-xs); font-weight:600; padding:var(--s1) var(--s2); border-radius:var(--r-pill);
+      background:var(--degraded-bg); color:var(--degraded-fg); }
+    .card.selfcare{border-top-color:var(--selfcare-line)} .card.selfcare .badge{background:var(--selfcare-fg)}
+    .card.seegp{border-top-color:var(--seegp-line)} .card.seegp .badge{background:var(--seegp-fg)}
+    .card.urgentcare{border-top-color:var(--urgentcare-line)} .card.urgentcare .badge{background:var(--urgentcare-fg)}
+    .card.emergency{border-top-color:var(--emergency-line)} .card.emergency .badge{background:var(--emergency-fg)}
+    .emergency-msg { background:var(--emergency-bg); color:var(--emergency-fg); font-weight:600;
+      padding:var(--s3) var(--s4); border-radius:var(--r); box-shadow:inset 0 0 0 1px var(--emergency-line); }
+
+    /* trace tree (matches the app) */
+    .tracebox { font-family:var(--mono); font-size:var(--t-sm); }
+    .node>.row { display:flex; align-items:center; gap:var(--s2); padding:var(--s1) 0; border-radius:var(--r-sm); }
+    .node>.row:hover { background:var(--g-50); }
+    .caret { width:16px; flex:none; text-align:center; color:var(--faint); cursor:pointer; user-select:none; }
+    .caret.leaf { visibility:hidden; }
+    .span-pill { font-size:11px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; padding:1px var(--s2);
+      border-radius:var(--r-sm); background:var(--g-100); color:var(--g-600); flex:none; }
+    .node.tool .span-pill { background:var(--seegp-bg); color:var(--seegp-fg); }
+    .node.guardrail .span-pill { background:var(--urgentcare-bg); color:var(--urgentcare-fg); }
+    .node.degraded .span-pill { background:var(--emergency-bg); color:var(--emergency-fg); }
+    .node .name { flex:none; color:var(--g-700); }
+    .node.degraded .name { color:var(--emergency-fg); font-weight:600; }
+    .bar-wrap { flex:1; min-width:30px; height:6px; background:var(--g-100); border-radius:var(--r-pill); overflow:hidden; }
+    .bar { height:100%; border-radius:var(--r-pill); background:linear-gradient(90deg,#818cf8,var(--accent)); }
+    .node.degraded .bar { background:linear-gradient(90deg,#fca5a5,var(--emergency-line)); }
+    .dur { flex:none; min-width:60px; text-align:right; color:var(--muted); font-variant-numeric:tabular-nums; }
+    .children { margin-left:var(--s4); padding-left:var(--s2); box-shadow:inset 1px 0 0 var(--g-100); }
+    .node.collapsed>.children { display:none; }
+    .note { color:var(--g-600); font-size:var(--t-sm); margin-top:var(--s3); }
+
+    /* timeline */
+    .timeline { display:grid; gap:0; }
+    .ms-label { font-size:var(--t-xs); font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--accent-600);
+      margin:var(--s4) 0 var(--s2); }
+    .slice { display:grid; grid-template-columns:auto 1fr; gap:var(--s3); padding:var(--s2) 0; }
+    .slice .n { width:26px; height:26px; border-radius:var(--r-pill); background:var(--accent-50); color:var(--accent-600);
+      display:grid; place-items:center; font-size:var(--t-xs); font-weight:700; }
+    .slice .b { font-weight:600; } .slice .b span { font-weight:400; color:var(--g-600); }
+
+    /* run commands */
+    .terminal { background:#0f172a; color:#e2e8f0; border-radius:var(--r-lg); padding:var(--s5); font-family:var(--mono);
+      font-size:var(--t-sm); line-height:1.8; box-shadow:var(--sh-md); overflow-x:auto; }
+    .terminal .c { color:#94a3b8; } .terminal .p { color:#6ee7b7; }
+
+    footer { padding:var(--s7) 0; border-top:1px solid var(--g-100); color:var(--muted); font-size:var(--t-sm); }
+    footer .links { display:flex; flex-wrap:wrap; gap:var(--s4); margin-bottom:var(--s3); }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="wrap">
+      <span class="brand"><span class="mark"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 5 4-12 2 7h6"/></svg></span> Care Triage</span>
+      <a class="link hide-sm" href="#architecture">Architecture</a>
+      <a class="link hide-sm" href="#concerns">Concerns</a>
+      <a class="link hide-sm" href="#demo">See it work</a>
+      <a class="link hide-sm" href="#build">How it was built</a>
+      <a class="btn ghost" href="/">Live app →</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="wrap">
+      <span class="eyebrow">C# · .NET 8 · runs offline</span>
+      <h1>A runnable mini <em>agent runtime</em>, with a health triage agent on top.</h1>
+      <p class="lede">A domain-agnostic orchestration core — reason→act→observe loop, config-driven
+        flights, a failure/degradation framework, a work-context store, safety guardrails, and
+        OpenTelemetry tracing — reproduced in miniature. A symptom-triage agent is the sample domain,
+        and a browser app visualizes the per-turn trace tree.</p>
+      <div class="cta">
+        <a class="btn primary" href="/">Open the live app</a>
+        <a class="btn ghost" href="https://github.com/Christina7/mini-health-agent-runtime">View on GitHub</a>
+      </div>
+      <div class="disclaimer">⚠ Educational only — not medical advice. A navigation aid with a hard-coded emergency guardrail, not a diagnostic system.</div>
+    </div>
+  </header>
+
+  <section id="architecture">
+    <div class="wrap">
+      <div class="kicker">Architecture</div>
+      <h2>A reusable core, a health domain, two thin hosts</h2>
+      <p class="section-lede">The runtime knows nothing about health — it could host any agent. All
+        health specifics live one layer up. Two hosts (a web app and a CLI) drive the exact same
+        composition root; neither contains agent logic. That separation is the whole point: it's a
+        <strong>runtime</strong>, not a triage script.</p>
+      <div class="stack">
+        <div class="layer hosts">
+          <div class="h">CareTriageAgent.Web &nbsp;·&nbsp; CareTriageAgent.Cli</div>
+          <div class="d">Thin hosts. The web host marshals HTTP ↔ runtime (<code>POST /triage</code>) and returns the serialized trace; the CLI feeds one message.</div>
+        </div>
+        <div class="arrow">▼ both call the same <code>CareTriageSession.OnUserMessageAsync</code></div>
+        <div class="layer domain">
+          <div class="h">CareTriageAgent · the health domain</div>
+          <div class="d">Symptom knowledge base, red-flag guardrail, deterministic planner, triage policy, shared data. The composition root wires the runtime to the domain.</div>
+        </div>
+        <div class="arrow">▼ built on</div>
+        <div class="layer core">
+          <div class="h">AgentRuntime · domain-agnostic core</div>
+          <div class="d">Orchestrator loop · tools · guardrail hook · config + JSON-Patch flights · failure framework · work context · OpenTelemetry tracing. Zero health knowledge.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="concerns">
+    <div class="wrap">
+      <div class="kicker">What it reproduces</div>
+      <h2>Seven agent-platform concerns, each a navigable piece</h2>
+      <p class="section-lede">Each mirrors a standard concern of a production agent platform. Six are
+        implemented and exercised by tests; one is honestly marked future.</p>
+      <div class="grid" id="concern-grid"></div>
+    </div>
+  </section>
+
+  <section id="demo">
+    <div class="wrap">
+      <div class="kicker">See it work</div>
+      <h2>Four behaviors that fall out of the architecture</h2>
+      <p class="section-lede">Each is a real turn through the runtime. Pick one — the agent's reply and
+        the per-turn trace tree are shown exactly as the live app renders them. (Click span carets to collapse.)</p>
+      <div class="tabs" id="demo-tabs"></div>
+      <div class="demo">
+        <div class="panel">
+          <div class="ph">Conversation</div>
+          <div class="pb" id="demo-chat"></div>
+        </div>
+        <div class="panel">
+          <div class="ph">Trace · this turn</div>
+          <div class="pb tracebox" id="demo-trace"></div>
+        </div>
+      </div>
+      <p class="note" id="demo-note"></p>
+    </div>
+  </section>
+
+  <section id="build">
+    <div class="wrap">
+      <div class="kicker">How it was built</div>
+      <h2>Test-first, in vertical slices</h2>
+      <p class="section-lede">Each slice left the repo green and runnable; each was one merged PR. 41
+        unit + integration tests pin every behavior (xUnit + Moq + WebApplicationFactory), run on CI.</p>
+      <div class="timeline" id="timeline"></div>
+    </div>
+  </section>
+
+  <section id="run">
+    <div class="wrap">
+      <div class="kicker">Run it</div>
+      <h2>Clone &amp; <code>dotnet run</code> — no keys, no network, no database</h2>
+      <p class="section-lede">The only prerequisite is the .NET 8 SDK. The default path is fully offline and deterministic.</p>
+      <div class="terminal">
+<span class="c"># build &amp; test</span><br>
+<span class="p">$</span> dotnet build MiniHealthAgentRuntime.sln<br>
+<span class="p">$</span> dotnet test <span class="c"># 41 passing</span><br><br>
+<span class="c"># the web app — browser chat UI with a live trace tree</span><br>
+<span class="p">$</span> dotnet run --project src/CareTriageAgent.Web <span class="c"># open the printed http://localhost:5xxx</span><br><br>
+<span class="c"># or the CLI — same runtime, deterministic</span><br>
+<span class="p">$</span> dotnet run --project src/CareTriageAgent.Cli -- <span style="color:#fcd34d">"severe chest pain and shortness of breath"</span>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="links">
+        <a href="https://github.com/Christina7/mini-health-agent-runtime">GitHub</a>
+        <a href="https://github.com/Christina7/mini-health-agent-runtime/blob/main/ARCHITECTURE.md">ARCHITECTURE.md</a>
+        <a href="https://github.com/Christina7/mini-health-agent-runtime/blob/main/DESIGN.md">DESIGN.md</a>
+        <a href="/">Live app</a>
+      </div>
+      <div>Educational only — not medical advice. Synthetic data; deterministic mock planner by default.</div>
+    </div>
+  </footer>
+
+  <script>
+    // ── Concerns ───────────────────────────────────────────────
+    const CONCERNS = [
+      { t:'Agent orchestration', built:true, d:'Multi-step reason→act→observe loop: guardrails, then plan→act→observe until Finish or the step budget.', f:'Orchestration/AgentOrchestrator.cs' },
+      { t:'Config + flights', built:true, d:'Effective config = base + ordered, allow-listed JSON-Patch flight overlays. Change behavior with no recompile.', f:'Config/RuntimeConfigProvider.cs' },
+      { t:'Failure / degradation', built:true, d:'Retry → degrade → fallback; CompliantException keeps internal detail out of user-facing replies.', f:'Failure/ExecutionScope.cs' },
+      { t:'Tool framework', built:true, d:'ITool + registry of config-enabled tools; descriptors handed to the planner.', f:'Tools/ToolRegistry.cs' },
+      { t:'Work context / memory', built:true, d:'Per-conversation History across turns; per-turn observations reset each turn. Domain-agnostic.', f:'Context/WorkContext.cs' },
+      { t:'Distributed tracing', built:true, d:'ActivitySource spans bucketed by the root TraceId into a serializable tree — latency + degraded tag.', f:'Observability/TraceCollector.cs' },
+      { t:'Safety invariant', built:true, d:'The red-flag guardrail runs first, every turn, outside the tool registry. No flight can disable it.', f:'Guardrails/RedFlagGuardrail.cs' },
+      { t:'Provider cache', built:false, d:'A cacheable IWorkContextProvider with query-dependent cross-turn memoization (cache-hit span). The store exists; this mechanism is not built.', f:'Future / not implemented' },
+    ];
+    const grid = document.getElementById('concern-grid');
+    for (const c of CONCERNS) {
+      const el = document.createElement('div');
+      el.className = 'concern' + (c.built ? '' : ' future');
+      el.innerHTML = `<div class="t">${c.t}<span class="tag">${c.built ? 'built' : 'future'}</span></div>
+        <div class="d">${c.d}</div><div class="f">${c.f}</div>`;
+      grid.appendChild(el);
+    }
+
+    // ── Demo flows (real turns; durations representative) ───────
+    const span = (name, ms, degraded, children) => ({ name, durationMs: ms, degraded: !!degraded, children: children || [] });
+    const FLOWS = {
+      normal: {
+        label: 'Normal', user: 'sore throat and mild fever',
+        triage: { urgency:'SelfCare', recommendedAction:'Looks self-manageable at home; monitor your symptoms.',
+          advice:'Rest, fluids, and throat lozenges usually help. Stay hydrated and monitor your temperature.',
+          toolsInvoked:['symptom_kb'], degraded:false, disclaimer:'Educational only — not medical advice.' },
+        trace: span('triage.turn',2.41,false,[ span('guardrail',0.10), span('agent.step',1.32,false,[ span('tool:symptom_kb',0.44) ]), span('agent.step',0.31) ]),
+        note: 'Low score → SelfCare. The planner calls symptom_kb, reads the score, and finishes with a structured TriageResult.'
+      },
+      urgent: {
+        label: 'Higher urgency', user: 'dizziness and abdominal pain',
+        triage: { urgency:'UrgentCare', recommendedAction:'Seek urgent care today.',
+          advice:'Sit or lie down; avoid sudden movements. Note where the pain is and whether it worsens.',
+          toolsInvoked:['symptom_kb'], degraded:false, disclaimer:'Educational only — not medical advice.' },
+        trace: span('triage.turn',2.05,false,[ span('guardrail',0.04), span('agent.step',1.71,false,[ span('tool:symptom_kb',0.46) ]), span('agent.step',0.30) ]),
+        note: 'Score 7 (dizziness 3 + abdominal pain 4) lands in the urgent-care band via TriagePolicy — the threshold mapping is pure and config-driven.'
+      },
+      redflag: {
+        label: '🚨 Red-flag', user: 'severe chest pain and shortness of breath',
+        emergency: '🚨 Possible cardiac emergency — call your local emergency number / go to the ER now.',
+        trace: span('triage.turn',0.18,false,[ span('guardrail',0.15) ]),
+        note: 'The always-on guardrail matches the cardiac rule and short-circuits BEFORE any planning — no tools run. No flight or config can disable it.'
+      },
+      degraded: {
+        label: '⚠ Degraded', user: 'sore throat and fever  (with “Break symptom KB” on)',
+        triage: { urgency:'SeeGp', recommendedAction:"I couldn't verify your symptoms against the guidance right now; please consult a healthcare professional.",
+          advice:'', toolsInvoked:['symptom_kb'], degraded:true, disclaimer:'Educational only — not medical advice.' },
+        trace: span('triage.turn',18.5,true,[ span('guardrail',1.09), span('agent.step',3.22,false,[ span('tool:symptom_kb',1.66,true) ]), span('agent.step',12.0) ]),
+        note: 'The tool fails; ExecutionScope retries then degrades to a safe fallback (never a crash). The tool span is flagged degraded and the turn is marked degraded.'
+      },
+    };
+
+    function escapeHtml(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    function spanKind(name){
+      if(name.startsWith('tool:')) return {cls:'tool',pill:'tool',label:name.slice(5)};
+      if(name==='guardrail') return {cls:'guardrail',pill:'guard',label:'guardrail'};
+      if(name==='agent.step') return {cls:'step',pill:'step',label:'agent.step'};
+      if(name==='triage.turn') return {cls:'turn',pill:'turn',label:'triage.turn'};
+      return {cls:'span',pill:'span',label:name};
+    }
+    function buildNode(node, root){
+      const k = spanKind(node.name);
+      const wrap = document.createElement('div');
+      wrap.className = 'node ' + (node.degraded ? 'degraded' : k.cls);
+      const has = node.children && node.children.length;
+      const pct = Math.max(3, Math.min(100, (node.durationMs/root)*100));
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `<span class="caret ${has?'':'leaf'}">▾</span><span class="span-pill">${k.pill}</span>`+
+        `<span class="name">${escapeHtml(k.label)}${node.degraded?' ⚠':''}</span>`+
+        `<span class="bar-wrap"><span class="bar" style="width:${pct}%"></span></span>`+
+        `<span class="dur">${node.durationMs.toFixed(2)} ms</span>`;
+      wrap.appendChild(row);
+      if(has){
+        const kids = document.createElement('div'); kids.className='children';
+        node.children.forEach(c=>kids.appendChild(buildNode(c,root)));
+        wrap.appendChild(kids);
+        const caret = row.querySelector('.caret');
+        caret.addEventListener('click',()=>{ wrap.classList.toggle('collapsed'); caret.textContent = wrap.classList.contains('collapsed')?'▸':'▾'; });
+      }
+      return wrap;
+    }
+
+    function renderFlow(key){
+      const f = FLOWS[key];
+      const chat = document.getElementById('demo-chat');
+      const trace = document.getElementById('demo-trace');
+      let html = `<div class="user-msg">${escapeHtml(f.user)}</div>`;
+      if (f.emergency) {
+        html += `<div class="emergency-msg">${escapeHtml(f.emergency)}</div>`;
+      } else {
+        const t = f.triage, u = t.urgency;
+        const deg = t.degraded ? `<span class="degraded-tag">⚠ degraded — safe fallback</span>` : '';
+        const tools = t.toolsInvoked.map(x=>`<code>${escapeHtml(x)}</code>`).join(' ') || '(none)';
+        html += `<div class="card ${u.toLowerCase()}">
+          <div class="badge-row"><span class="badge">${u}</span>${deg}</div>
+          <div class="action">${escapeHtml(t.recommendedAction)}</div>
+          ${t.advice ? `<div class="advice">${escapeHtml(t.advice)}</div>`:''}
+          <div class="tools">Tools invoked: ${tools}</div>
+          <div class="disc">${escapeHtml(t.disclaimer)}</div></div>`;
+      }
+      chat.innerHTML = html;
+      trace.innerHTML = '';
+      trace.appendChild(buildNode(f.trace, f.trace.durationMs));
+      document.getElementById('demo-note').textContent = f.note;
+      document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.key===key));
+    }
+
+    const tabsEl = document.getElementById('demo-tabs');
+    Object.entries(FLOWS).forEach(([key,f])=>{
+      const b = document.createElement('button');
+      b.className='tab'; b.dataset.key=key; b.textContent=f.label;
+      b.addEventListener('click',()=>renderFlow(key));
+      tabsEl.appendChild(b);
+    });
+    renderFlow('normal');
+
+    // ── Timeline ───────────────────────────────────────────────
+    const SLICES = [
+      ['M1','Milestone 1 — the engine (offline, headless, CLI)'],
+      [1,'Orchestrator loop skeleton'],[2,'Tool framework + act→observe loop'],[3,'Red-flag guardrail'],
+      [4,'Step budget → safe fallback'],[5,'Triage policy (score → urgency)'],[6,'Triage brain: scoring + planner + result'],
+      [7,'Failure framework (retry / degrade / swallow)'],[8,'Degrade wiring'],[9,'Config engine (JSON-Patch flights)'],
+      [10,'Config wiring'],[11,'Safety invariant (composition root)'],[12,'Observability (trace tree)'],
+      ['M2','Milestone 2 — the web app'],
+      [13,'Web host: POST /triage + session store + integration test'],
+      [14,'Browser UI: triage card + trace tree + toolbar (+ per-turn state fix)'],
+      [15,'CI: GitHub Actions build/test + badge'],[16,'Docs: ARCHITECTURE.md + README refresh'],
+      [17,'UI refresh: modern design (Refactoring UI)'],
+    ];
+    const tl = document.getElementById('timeline');
+    for (const [n,label] of SLICES) {
+      if (n==='M1' || n==='M2') { const h=document.createElement('div'); h.className='ms-label'; h.textContent=label; tl.appendChild(h); continue; }
+      const row = document.createElement('div'); row.className='slice';
+      row.innerHTML = `<div class="n">${n}</div><div class="b">${escapeHtml(label)}</div>`;
+      tl.appendChild(row);
+    }
+  </script>
+</body>
+</html>
