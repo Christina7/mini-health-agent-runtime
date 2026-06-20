@@ -65,6 +65,8 @@ One turn: `OnUserMessage` → **guardrail pipeline** (red-flag runs first, can s
 **plan → act → observe loop** (planner picks the next step; tools run through `ExecutionScope`;
 observations feed back) → **Finish** with a `TriageResult` → trace tree emitted.
 
+![One turn: BeginTurn → guardrail (red-flag short-circuits to an emergency reply) → a bounded plan→act→observe loop with a tool through ExecutionScope (retry→degrade→fallback) → Finish with a TriageResult, the trace tree emitted throughout](docs/diagrams/one-turn-flow.png)
+
 > **Deep dive:** [ARCHITECTURE.md](ARCHITECTURE.md) walks the hosting model, a `POST /triage`
 > request, one full turn, and how to debug each component. Original design notes — contracts,
 > schemas, control flow — are in [DESIGN.md](DESIGN.md).
