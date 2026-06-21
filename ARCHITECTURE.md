@@ -5,7 +5,8 @@ quick start and concept→file map; this document explains how the pieces fit an
 through them. For the original design rationale, contracts, and schemas, see [DESIGN.md](DESIGN.md).
 
 > ⚠️ **Educational only — not medical advice.** The triage agent is a navigation aid with a
-> hard-coded emergency-escalation guardrail, not a diagnostic system.
+> hard-coded emergency-escalation guardrail; the planner produces illustrative targets behind an
+> always-on unsafe-goal guardrail. Neither is a diagnostic or clinical tool.
 
 ---
 
@@ -14,26 +15,32 @@ through them. For the original design rationale, contracts, and schemas, see [DE
 Three layers, each depending only on the one below it:
 
 ```
-HealthAgents.Web   CareTriageAgent.Cli      ← thin hosts (HTTP / console). No agent logic.
-        \                   /
-         CareTriageAgent                        ← the HEALTH domain: tools, guardrail, planner, data
-              |
-         AgentRuntime                           ← domain-agnostic runtime: the reusable core
+  HealthAgents.Web   ·   CareTriageAgent.Cli      ← thin hosts (HTTP / console). No agent logic.
+        |                        |
+  CareTriageAgent   +   HealthPlanAgent           ← two HEALTH domains: siblings on the runtime
+        \                       /
+                AgentRuntime                       ← domain-agnostic runtime: the reusable core
 ```
 
 - **`AgentRuntime`** is the reusable core. It knows nothing about health — it owns the agent loop,
   the tool/guardrail/LLM abstractions, config + flights, the failure framework, the work-context
   store, and tracing. It could host any agent.
-- **`CareTriageAgent`** is the health domain built on top: the symptom knowledge base, the red-flag
+- **`CareTriageAgent`** is the first health domain: the symptom knowledge base, the red-flag
   guardrail, the deterministic planner, the triage policy, and the shared domain data
   (`CareTriageDomain`). Its composition root, `CareTriageSession`, wires the runtime to the domain.
-- **`HealthAgents.Web`** and **`CareTriageAgent.Cli`** are thin hosts. Neither contains agent
-  logic: the Web host marshals HTTP ↔ runtime; the CLI host feeds a message from the command line.
-  Both drive the *same* `CareTriageSession.OnUserMessageAsync`.
+- **`HealthPlanAgent`** is a **second, very different domain** on the *same* core — a multi-step,
+  multi-tool planner (`profile_analyzer → plan_generator → task_decomposer`, plus a log chain) that
+  produces a living artifact. It is a **sibling** of `CareTriageAgent`: it references `AgentRuntime`
+  only, never the triage agent. Its composition root is `HealthPlanSession`; its root span is
+  `"plan.turn"`. The two agents sharing one runtime *is* the domain-agnostic claim, made concrete.
+- **`HealthAgents.Web`** and **`CareTriageAgent.Cli`** are thin hosts. Neither contains agent logic:
+  the Web host marshals HTTP ↔ runtime and serves **both** agents (`POST /triage` →
+  `CareTriageSession.OnUserMessageAsync`, `POST /plan` → `HealthPlanSession.SubmitAsync`); the CLI
+  host feeds one triage message from the command line.
 
-That separation is the point — it's a **runtime**, not a triage script. The first thing to verify
-when extending it: domain concepts (symptoms, urgency, chest pain) must never leak into
-`AgentRuntime`.
+That separation is the point — it's a **runtime**, not a triage script, and the second agent is the
+proof. The first thing to verify when extending it: domain concepts (symptoms, urgency, calories,
+chest pain) must never leak into `AgentRuntime`, and the two domains must never reference each other.
 
 ---
 
@@ -74,8 +81,10 @@ session → one `OnUserMessageAsync` → print the reply, triage card, and trace
 `AgentOrchestrator.RunTurnAsync` (`src/AgentRuntime/Orchestration/AgentOrchestrator.cs`) is the
 canonical loop. In order:
 
-1. **Start the trace.** A `TraceCollector` is created and the root `triage.turn` Activity is started
-   (`RuntimeActivitySource`). Every span this turn is bucketed by the root's `TraceId`.
+1. **Start the trace.** A `TraceCollector` is created and the root Activity is started
+   (`RuntimeActivitySource`) under the configured root span name — `triage.turn` for the triage agent,
+   `plan.turn` for the planner (the one constructor argument that differs). Every span this turn is
+   bucketed by the root's `TraceId`.
 2. **Begin the turn.** `ctx.BeginTurn()` clears the previous turn's working state (observations +
    degraded flag) so this turn is assessed on its own merits; conversation `History` carries over.
    `ctx.AppendUser(message)` records the new message.
@@ -91,6 +100,12 @@ canonical loop. In order:
 5. **Budget exhausted** → a safe, degraded fallback reply (never an infinite loop, never a crash).
 6. **Build the tree.** The collector reconstructs the `TraceNode` tree from the activities for this
    `TraceId`, attached to the `TurnResult`.
+
+The **health planner reuses this exact loop unchanged** — `HealthPlanSession.SubmitAsync` runs the same
+`RunTurnAsync` with the `UnsafeGoalGuardrail` in the pipeline and a longer tool chain
+(`profile_analyzer → plan_generator → task_decomposer` on a create, `nutrition_calculator →
+progress_evaluator` on a log), finishing with a `HealthPlanResult` instead of a `TriageResult`. The
+only difference visible in the loop is the root span name and which tools/guardrails were registered.
 
 ---
 
