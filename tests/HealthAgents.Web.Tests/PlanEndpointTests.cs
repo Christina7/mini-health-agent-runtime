@@ -99,4 +99,36 @@ public class PlanEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    [Fact]
+    public async Task Flights_change_the_calorie_target_over_http()
+    {
+        // Exercises the real config/plan/flights/*.json files loaded by the host — same goal+profile,
+        // different calorie target, no recompile.
+        var client = _factory.CreateClient();
+
+        var aggressive = await CalorieTargetWithFlight(client, "conv-agg", "aggressive-plan");
+        var conservative = await CalorieTargetWithFlight(client, "conv-con", "conservative-plan");
+
+        Assert.True(aggressive < conservative, $"aggressive {aggressive} should be < conservative {conservative}");
+    }
+
+    private static async Task<int> CalorieTargetWithFlight(HttpClient client, string conversationId, string flight)
+    {
+        var body = new
+        {
+            conversationId,
+            action = "Create",
+            goal = "LoseFat",
+            flights = new[] { flight },
+            profile = new
+            {
+                ageYears = 30, sex = "Male", weightKg = 90.0, heightCm = 180.0,
+                activityLevel = "Moderate", targetDays = 84, goalWeightKg = 80.0,
+            },
+        };
+        var response = await client.PostAsJsonAsync("/plan", body);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return json.GetProperty("plan").GetProperty("dailyCalorieTarget").GetInt32();
+    }
 }
