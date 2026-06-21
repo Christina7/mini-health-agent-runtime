@@ -175,6 +175,22 @@
     .node.collapsed>.children { display:none; }
     .note { color:var(--ink-subtle); font-size:var(--t-sm); margin-top:var(--s3); }
 
+    /* planner card (matches /plan-app) */
+    .envelope { font-family:var(--mono); font-size:var(--t-xs); color:var(--ink-subtle); background:var(--surface-2);
+      box-shadow:inset 0 0 0 1px var(--hairline); border-radius:var(--r-sm); padding:var(--s2) var(--s3); margin-bottom:var(--s3); white-space:pre-wrap; word-break:break-word; }
+    .envelope b { color:var(--accent-hover); font-weight:600; }
+    .plan-metrics { display:flex; gap:var(--s2); padding:var(--s3) var(--s4) 0; }
+    .metric { flex:1; background:var(--surface-1); box-shadow:inset 0 0 0 1px var(--hairline); border-radius:var(--r-sm); padding:var(--s2) var(--s3); }
+    .metric .mv { font-weight:600; font-size:var(--t-md); letter-spacing:-.01em; font-variant-numeric:tabular-nums; }
+    .metric .ml { font-size:var(--t-xs); color:var(--ink-tertiary); text-transform:uppercase; letter-spacing:.4px; }
+    .plan-summary { color:var(--ink-muted); font-size:var(--t-sm); padding:var(--s3) var(--s4) 0; }
+    .plan-tasks { padding:var(--s3) var(--s4) var(--s1); display:grid; gap:var(--s1); }
+    .ptask { display:flex; align-items:baseline; gap:var(--s2); font-size:var(--t-sm); }
+    .ptask .pcheck { color:var(--ink-tertiary); flex:none; }
+    .ptask .pcat { font-weight:600; flex:none; min-width:78px; }
+    .ptask .pdesc { color:var(--ink-subtle); }
+    .badge.status-under { background:var(--seegp-line); } .badge.status-on { background:var(--selfcare-line); } .badge.status-over { background:var(--urgentcare-line); }
+
     /* timeline */
     .timeline { display:grid; gap:0; }
     .ms-label { font-size:var(--t-xs); font-weight:600; letter-spacing:.5px; text-transform:uppercase; color:var(--accent-hover);
@@ -272,8 +288,8 @@
 
   <section id="demo">
     <div class="wrap">
-      <div class="kicker">See it work</div>
-      <h2>Four behaviors that fall out of the architecture</h2>
+      <div class="kicker">See it work — the first agent (triage)</div>
+      <h2>Four triage behaviors that fall out of the architecture</h2>
       <p class="section-lede">Each is a real turn through the runtime. Pick one — the agent's reply and
         the per-turn trace tree are shown exactly as the live app renders them. (Click span carets to collapse.)</p>
       <div class="tabs" id="demo-tabs"></div>
@@ -288,6 +304,29 @@
         </div>
       </div>
       <p class="note" id="demo-note"></p>
+    </div>
+  </section>
+
+  <section id="demo-plan">
+    <div class="wrap">
+      <div class="kicker">See it work — the second agent (planner)</div>
+      <h2>The multi-step planner, same runtime</h2>
+      <p class="section-lede">The health planner runs on the same engine, but takes <em>several</em> tool
+        steps, carries a typed <code>PlanEnvelope</code>, and builds an artifact that grows as you log days.
+        Pick a turn — the plan card and the <code>plan.turn</code> trace are shown exactly as
+        <code>/plan-app</code> renders them.</p>
+      <div class="tabs" id="plan-tabs"></div>
+      <div class="demo">
+        <div class="panel">
+          <div class="ph">Planner</div>
+          <div class="pb" id="plan-card"></div>
+        </div>
+        <div class="panel">
+          <div class="ph">Trace · this turn</div>
+          <div class="pb tracebox" id="plan-trace"></div>
+        </div>
+      </div>
+      <p class="note" id="plan-note"></p>
     </div>
   </section>
 
@@ -401,6 +440,7 @@
       if(name==='guardrail') return {cls:'guardrail',pill:'guard',label:'guardrail'};
       if(name==='agent.step') return {cls:'step',pill:'step',label:'agent.step'};
       if(name==='triage.turn') return {cls:'turn',pill:'turn',label:'triage.turn'};
+      if(name==='plan.turn') return {cls:'turn',pill:'turn',label:'plan.turn'};
       return {cls:'span',pill:'span',label:name};
     }
     function buildNode(node, root){
@@ -448,7 +488,7 @@
       trace.innerHTML = '';
       trace.appendChild(buildNode(f.trace, f.trace.durationMs));
       document.getElementById('demo-note').textContent = f.note;
-      document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active', b.dataset.key===key));
+      document.querySelectorAll('#demo-tabs .tab').forEach(b=>b.classList.toggle('active', b.dataset.key===key));
     }
 
     const tabsEl = document.getElementById('demo-tabs');
@@ -459,6 +499,107 @@
       tabsEl.appendChild(b);
     });
     renderFlow('normal');
+
+    // ── Planner demo flows (real /plan turns; durations representative) ───
+    const PLAN_FLOWS = {
+      create: {
+        label: 'Create a plan',
+        envelope: '{ "action":"Create", "goal":"LoseFat",\n  "profile":{ "weightKg":90, "heightCm":180, "goalWeightKg":80, "targetDays":84, … } }',
+        plan: {
+          goal:'LOSE FAT',
+          metrics:[['2331','kcal/day'],['144 g','protein'],['133','days']],
+          summary:'Eat ~2331 kcal/day (~144 g protein) to reach 80 kg in about 133 days. A safe ~20% deficit; the cap binds, so the timeline stretches.',
+          tasks:[
+            ['Nutrition','Stay near 2331 kcal today; prioritise protein and whole foods.'],
+            ['Movement','30 minutes brisk activity plus a short walk after meals.'],
+            ['Sleep','Aim for 7–9 hours; keep a consistent bedtime.'],
+            ['Recovery','Hydrate and take 5 minutes to de-stress.'],
+          ],
+          disclaimer:'Educational only — not medical advice.'
+        },
+        trace: span('plan.turn',2.62,false,[ span('guardrail',0.10),
+          span('agent.step',1.00,false,[ span('tool:profile_analyzer',0.42) ]),
+          span('agent.step',0.68,false,[ span('tool:plan_generator',0.31) ]),
+          span('agent.step',0.55,false,[ span('tool:task_decomposer',0.45) ]),
+          span('agent.step',0.20) ]),
+        note: 'Three tools chain with a real dependency: plan_generator reads profile_analyzer’s TDEE from the observations (it does not recompute), then task_decomposer turns the targets into a checklist. The final agent.step is the Finish.'
+      },
+      log: {
+        label: 'Log a day',
+        envelope: '{ "action":"Log", "conversationId":"…",\n  "log":{ "caloriesLogged":2200, "tasksCompleted":3 } }',
+        progress: { day:1, status:'Under', caloriesLogged:2200, target:2331, tasksCompleted:3, tasksTotal:4,
+          note:'Under target — good, just don’t undereat. 3/4 tasks done.' },
+        trace: span('plan.turn',1.90,false,[ span('guardrail',0.08),
+          span('agent.step',0.70,false,[ span('tool:nutrition_calculator',0.30) ]),
+          span('agent.step',0.58,false,[ span('tool:progress_evaluator',0.28) ]),
+          span('agent.step',0.18) ]),
+        note: 'The prior plan is held server-side per conversationId (not resent). nutrition_calculator compares the day vs the target → Under / On / Over; progress_evaluator appends a human note to the living artifact, which now carries one logged day.'
+      },
+      unsafe: {
+        label: '🛡 Unsafe goal',
+        envelope: '{ "action":"Create", "goal":"LoseFat",\n  "profile":{ "weightKg":55, "heightCm":180, "goalWeightKg":50, … } }',
+        referral: 'This goal could be unsafe to pursue alone. Please consult a doctor or dietitian before starting a weight-loss plan.',
+        trace: span('plan.turn',0.21,false,[ span('guardrail',0.16) ]),
+        note: 'A goal that is already underweight, aims at an underweight BMI, or implies a crash-diet intake trips the always-on UnsafeGoalGuardrail — it short-circuits before any tool runs and returns a referral with no plan. No flight can disable it.'
+      },
+      degraded: {
+        label: '⚠ Degraded',
+        envelope: '{ "action":"Create", …, "breakPlanGenerator":true }',
+        degradedMsg: 'I couldn’t build a full plan safely right now; please review your details or consult a professional.',
+        trace: span('plan.turn',12.4,true,[ span('guardrail',0.10),
+          span('agent.step',0.90,false,[ span('tool:profile_analyzer',0.40) ]),
+          span('agent.step',6.00,false,[ span('tool:plan_generator',2.10,true) ]),
+          span('agent.step',0.30) ]),
+        note: 'plan_generator throws; ExecutionScope retries then degrades to a safe fallback instead of crashing. profile_analyzer still succeeded — only the failing tool span and the turn are flagged ⚠ degraded.'
+      },
+    };
+
+    function renderPlanFlow(key){
+      const f = PLAN_FLOWS[key];
+      const card = document.getElementById('plan-card');
+      const trace = document.getElementById('plan-trace');
+      let html = `<div class="envelope"><b>POST /plan</b>\n${escapeHtml(f.envelope)}</div>`;
+      if (f.referral) {
+        html += `<div class="emergency-msg">${escapeHtml(f.referral)}</div>`;
+      } else if (f.degradedMsg) {
+        html += `<div class="card"><div class="badge-row"><span class="badge">No plan</span>`+
+          `<span class="degraded-tag">⚠ degraded — safe fallback</span></div>`+
+          `<div class="action">${escapeHtml(f.degradedMsg)}</div>`+
+          `<div class="disc">Educational only — not medical advice.</div></div>`;
+      } else if (f.plan) {
+        const p = f.plan;
+        const metrics = p.metrics.map(([v,l])=>`<div class="metric"><div class="mv">${escapeHtml(v)}</div><div class="ml">${escapeHtml(l)}</div></div>`).join('');
+        const tasks = p.tasks.map(([c,d])=>`<div class="ptask"><span class="pcheck">☐</span><span class="pcat">${escapeHtml(c)}</span><span class="pdesc">${escapeHtml(d)}</span></div>`).join('');
+        html += `<div class="card"><div class="badge-row"><span class="badge">${escapeHtml(p.goal)}</span></div>`+
+          `<div class="plan-metrics">${metrics}</div>`+
+          `<div class="plan-summary">${escapeHtml(p.summary)}</div>`+
+          `<div class="plan-tasks">${tasks}</div>`+
+          `<div class="disc">${escapeHtml(p.disclaimer)}</div></div>`;
+      } else if (f.progress) {
+        const g = f.progress;
+        html += `<div class="card"><div class="badge-row"><span class="badge status-${g.status.toLowerCase()}">Day ${g.day} · ${g.status}</span></div>`+
+          `<div class="plan-metrics">`+
+            `<div class="metric"><div class="mv">${g.caloriesLogged}</div><div class="ml">logged</div></div>`+
+            `<div class="metric"><div class="mv">${g.target}</div><div class="ml">target</div></div>`+
+            `<div class="metric"><div class="mv">${g.tasksCompleted}/${g.tasksTotal}</div><div class="ml">tasks</div></div></div>`+
+          `<div class="plan-summary">${escapeHtml(g.note)}</div>`+
+          `<div class="disc">Appended to the plan’s progress list — the artifact grows across turns.</div></div>`;
+      }
+      card.innerHTML = html;
+      trace.innerHTML = '';
+      trace.appendChild(buildNode(f.trace, f.trace.durationMs));
+      document.getElementById('plan-note').textContent = f.note;
+      document.querySelectorAll('#plan-tabs .tab').forEach(b=>b.classList.toggle('active', b.dataset.key===key));
+    }
+
+    const planTabsEl = document.getElementById('plan-tabs');
+    Object.entries(PLAN_FLOWS).forEach(([key,f])=>{
+      const b = document.createElement('button');
+      b.className='tab'; b.dataset.key=key; b.textContent=f.label;
+      b.addEventListener('click',()=>renderPlanFlow(key));
+      planTabsEl.appendChild(b);
+    });
+    renderPlanFlow('create');
 
     // ── Timeline ───────────────────────────────────────────────
     const SLICES = [
