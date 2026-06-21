@@ -24,15 +24,16 @@ public sealed class HealthPlanSession
     private readonly TurnInputHolder _holder = new();
     private HealthPlanResult? _currentPlan;
 
-    public HealthPlanSession(HealthPlanConfig config, string conversationId = "session")
+    public HealthPlanSession(HealthPlanConfig config, string conversationId = "session", bool breakPlanGenerator = false)
     {
         var policy = new PlanPolicy(config.Plan.DeficitCapFraction, config.Plan.ProteinGramsPerKg, config.Plan.CalorieFloor);
 
-        // Config-driven: only enabled tools are registered.
+        // Config-driven: only enabled tools are registered. The broken plan generator is a demo toggle
+        // for the degrade story — swap it in and the planner still produces a safe, degraded plan.
         var candidateTools = new ITool[]
         {
             new ProfileAnalyzerTool(),
-            new PlanGeneratorTool(policy),
+            breakPlanGenerator ? new BrokenPlanGeneratorTool() : new PlanGeneratorTool(policy),
             new TaskDecomposerTool(),
             new NutritionCalculatorTool(),
             new ProgressEvaluatorTool(),
