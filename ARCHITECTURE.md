@@ -14,7 +14,7 @@ through them. For the original design rationale, contracts, and schemas, see [DE
 Three layers, each depending only on the one below it:
 
 ```
-CareTriageAgent.Web   CareTriageAgent.Cli      ← thin hosts (HTTP / console). No agent logic.
+HealthAgents.Web   CareTriageAgent.Cli      ← thin hosts (HTTP / console). No agent logic.
         \                   /
          CareTriageAgent                        ← the HEALTH domain: tools, guardrail, planner, data
               |
@@ -27,7 +27,7 @@ CareTriageAgent.Web   CareTriageAgent.Cli      ← thin hosts (HTTP / console). 
 - **`CareTriageAgent`** is the health domain built on top: the symptom knowledge base, the red-flag
   guardrail, the deterministic planner, the triage policy, and the shared domain data
   (`CareTriageDomain`). Its composition root, `CareTriageSession`, wires the runtime to the domain.
-- **`CareTriageAgent.Web`** and **`CareTriageAgent.Cli`** are thin hosts. Neither contains agent
+- **`HealthAgents.Web`** and **`CareTriageAgent.Cli`** are thin hosts. Neither contains agent
   logic: the Web host marshals HTTP ↔ runtime; the CLI host feeds a message from the command line.
   Both drive the *same* `CareTriageSession.OnUserMessageAsync`.
 
@@ -39,7 +39,7 @@ when extending it: domain concepts (symptoms, urgency, chest pain) must never le
 
 ## Request walk-through — `POST /triage`
 
-What happens when the browser posts a message (`src/CareTriageAgent.Web/Program.cs`):
+What happens when the browser posts a message (`src/HealthAgents.Web/Program.cs`):
 
 1. **Bind + validate.** The JSON body binds to `TriageRequest { conversationId?, message, flights?,
    provider?, breakSymptomKb? }`. A blank `message` → `400`.
@@ -168,7 +168,7 @@ to debug it**.
 
 ## Where the tests pin each behavior
 
-`tests/AgentRuntime.Tests` (xUnit + Moq) pins the runtime + domain; `tests/CareTriageAgent.Web.Tests`
+`tests/AgentRuntime.Tests` (xUnit + Moq) pins the runtime + domain; `tests/HealthAgents.Web.Tests`
 (`WebApplicationFactory`) pins the HTTP surface.
 
 | Behavior | Test |

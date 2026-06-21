@@ -205,7 +205,7 @@
         <strong>runtime</strong>, not a triage script.</p>
       <div class="stack">
         <div class="layer hosts">
-          <div class="h">CareTriageAgent.Web &nbsp;·&nbsp; CareTriageAgent.Cli</div>
+          <div class="h">HealthAgents.Web &nbsp;·&nbsp; CareTriageAgent.Cli</div>
           <div class="d">Thin hosts. The web host marshals HTTP ↔ runtime (<code>POST /triage</code>) and returns the serialized trace; the CLI feeds one message.</div>
         </div>
         <div class="arrow">▼ both call the same <code>CareTriageSession.OnUserMessageAsync</code></div>
@@ -273,7 +273,7 @@
 <span class="p">$</span> dotnet build MiniHealthAgentRuntime.sln<br>
 <span class="p">$</span> dotnet test <span class="c"># 43 passing</span><br><br>
 <span class="c"># the web app — walkthrough at /, live chat app at /app</span><br>
-<span class="p">$</span> dotnet run --project src/CareTriageAgent.Web <span class="c"># open the printed http://localhost:5xxx</span><br>
+<span class="p">$</span> dotnet run --project src/HealthAgents.Web <span class="c"># open the printed http://localhost:5xxx</span><br>
 <span class="c">&nbsp;&nbsp;# press Ctrl+C in this terminal to stop the server</span><br><br>
 <span class="c"># or the CLI — same runtime, deterministic</span><br>
 <span class="p">$</span> dotnet run --project src/CareTriageAgent.Cli -- <span style="color:#fcd34d">"severe chest pain and shortness of breath"</span>
@@ -445,7 +445,7 @@
         'background:#0f172a;color:#e2e8f0;padding:12px 16px;border-radius:12px;box-shadow:var(--sh-lg);'+
         'font-size:13px;display:none;align-items:center;gap:12px;z-index:50;';
       toast.innerHTML = 'The live app needs the host running — &nbsp;<code style="background:#1e293b;color:#6ee7b7">'+
-        'dotnet run --project src/CareTriageAgent.Web</code>&nbsp; then open the printed URL.'+
+        'dotnet run --project src/HealthAgents.Web</code>&nbsp; then open the printed URL.'+
         '<button style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:16px">×</button>';
       document.body.appendChild(toast);
       let t;

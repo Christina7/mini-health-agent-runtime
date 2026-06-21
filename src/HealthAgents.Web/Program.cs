@@ -9,7 +9,7 @@ using CareTriageAgent;
 using CareTriageAgent.Config;
 using CareTriageAgent.Tools;
 using CareTriageAgent.Triage;
-using CareTriageAgent.Web;
+using HealthAgents.Web;
 
 // Web host: a deliberately thin surface over the runtime. It owns no agent logic — it maps HTTP to
 // the same CareTriageSession the CLI drives, keeps one session per conversationId so multi-turn
@@ -27,8 +27,9 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 var app = builder.Build();
 
 // Load base config + allow-listed flights from disk (relative to the content root so it resolves
-// both under `dotnet run` and the in-memory WebApplicationFactory test host).
-var configDir = Path.Combine(app.Environment.ContentRootPath, "config");
+// both under `dotnet run` and the in-memory WebApplicationFactory test host). Per-agent subfolder
+// `config/triage/` keeps the triage config separate from the plan agent's (added in a later slice).
+var configDir = Path.Combine(app.Environment.ContentRootPath, "config", "triage");
 var baseJson = File.ReadAllText(Path.Combine(configDir, "runtimeconfig.json"));
 var flightsDir = Path.Combine(configDir, "flights");
 var flights = Directory.Exists(flightsDir)
@@ -115,7 +116,7 @@ static int CountUserTurns(CareTriageSession session) =>
 // boot this host in-memory for the integration tests.
 public partial class Program;
 
-namespace CareTriageAgent.Web
+namespace HealthAgents.Web
 {
     /// <summary>POST /triage request body. See DESIGN.md "HTTP contract".</summary>
     public sealed record TriageRequest(

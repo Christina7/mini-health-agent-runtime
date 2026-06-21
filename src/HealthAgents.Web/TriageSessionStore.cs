@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using CareTriageAgent;
 
-namespace CareTriageAgent.Web;
+namespace HealthAgents.Web;
 
 /// <summary>
 /// Holds one <see cref="CareTriageSession"/> per <c>conversationId</c> so multi-turn memory and
