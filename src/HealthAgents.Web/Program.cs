@@ -10,6 +10,9 @@ using CareTriageAgent.Config;
 using CareTriageAgent.Tools;
 using CareTriageAgent.Triage;
 using HealthAgents.Web;
+using HealthPlanAgent;
+using HealthPlanAgent.Config;
+using HealthPlanAgent.Planning;
 
 // Web host: a deliberately thin surface over the runtime. It owns no agent logic — it maps HTTP to
 // the same CareTriageSession the CLI drives, keeps one session per conversationId so multi-turn
@@ -38,6 +41,15 @@ var flights = Directory.Exists(flightsDir)
 var configProvider = new RuntimeConfigProvider(baseJson, flights);
 
 var sessions = new TriageSessionStore();
+
+// Plan agent: its own config subfolder and session store, driving the SAME runtime as triage — the
+// proof that one engine hosts two very different agents. No plan flights ship yet (a later slice).
+var planConfigDir = Path.Combine(app.Environment.ContentRootPath, "config", "plan");
+var planConfigProvider = new RuntimeConfigProvider(File.ReadAllText(Path.Combine(planConfigDir, "runtimeconfig.json")));
+var planSessions = new PlanSessionStore();
+
+HealthPlanSession BuildPlanSession(string conversationId, string[]? activeFlights) =>
+    new(planConfigProvider.Resolve<HealthPlanConfig>(activeFlights ?? Array.Empty<string>()), conversationId);
 
 // Build a fresh session for a conversation from its requested flights / broken-tool toggle. Flights
 // are allow-listed by RuntimeConfigProvider (an unknown name throws ArgumentException) so the browser
@@ -107,6 +119,50 @@ app.MapPost("/triage", async (TriageRequest request, CancellationToken ct) =>
         conversationId, turn.Message, triage, turn.Trace, turn.Degraded, CountUserTurns(session)));
 });
 
+app.MapPost("/plan", async (PlanRequest request, CancellationToken ct) =>
+{
+    // The host validates shape; the guardrail (server-side) owns safety. A create needs a goal +
+    // profile; a log needs the day's numbers. The prior plan is held server-side, not resent.
+    if (request.Action == PlanAction.Create && (request.Goal is null || request.Profile is null))
+    {
+        return Results.BadRequest(new { error = "A create request needs a goal and a profile." });
+    }
+
+    if (request.Action == PlanAction.Log && request.Log is null)
+    {
+        return Results.BadRequest(new { error = "A log request needs the day's log." });
+    }
+
+    var conversationId = string.IsNullOrWhiteSpace(request.ConversationId)
+        ? Guid.NewGuid().ToString("n")
+        : request.ConversationId!;
+
+    HealthPlanSession session;
+    try
+    {
+        session = planSessions.GetOrCreate(conversationId, () => BuildPlanSession(conversationId, request.Flights));
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+
+    var envelope = new PlanEnvelope(request.Action, request.Goal, request.Profile, request.Log);
+
+    TurnResult turn;
+    try
+    {
+        turn = await session.SubmitAsync(envelope, ct);
+    }
+    catch (CompliantException ex)
+    {
+        return Results.Ok(new PlanResponse(conversationId, ex.UserSafeMessage, Plan: null, Trace: null, Degraded: true));
+    }
+
+    var plan = turn.Result is { } json ? HealthPlanResult.FromJson(json) : null;
+    return Results.Ok(new PlanResponse(conversationId, turn.Message, plan, turn.Trace, turn.Degraded));
+});
+
 app.Run();
 
 static int CountUserTurns(CareTriageSession session) =>
@@ -138,4 +194,25 @@ namespace HealthAgents.Web
         TraceNode? Trace,
         bool Degraded,
         int TurnCount);
+
+    /// <summary>
+    /// POST /plan request body. <see cref="Action"/> selects create vs log; a create carries the goal
+    /// and profile, a log carries only the day's <see cref="Log"/> (the prior plan is held server-side).
+    /// See DESIGN.md "HTTP contract".
+    /// </summary>
+    public sealed record PlanRequest(
+        string? ConversationId,
+        PlanAction Action,
+        HealthGoal? Goal = null,
+        HealthProfile? Profile = null,
+        DayLog? Log = null,
+        string[]? Flights = null);
+
+    /// <summary>POST /plan response. <see cref="Plan"/> is null when the guardrail short-circuits.</summary>
+    public sealed record PlanResponse(
+        string ConversationId,
+        string Reply,
+        HealthPlanResult? Plan,
+        TraceNode? Trace,
+        bool Degraded);
 }
