@@ -98,7 +98,7 @@ Built test-first in vertical slices; each left the repo green and runnable. (Eac
 
 | # | Slice | Contribution | Key types |
 |---|-------|--------------|-----------|
-| 13 | Web host | `POST /triage` over the same `CareTriageSession`; per-conversation session store; `WebApplicationFactory` test | `CareTriageAgent.Web`, `TriageSessionStore`, `CareTriageDomain` |
+| 13 | Web host | `POST /triage` over the same `CareTriageSession`; per-conversation session store; `WebApplicationFactory` test | `HealthAgents.Web`, `TriageSessionStore`, `CareTriageDomain` |
 | 14 | Browser UI | Color-coded triage card + collapsible trace tree + demo toolbar (no build step). Plus a per-turn state-reset fix surfaced by multi-turn use | `wwwroot/index.html`, `WorkContext.BeginTurn` |
 | 15 | CI | GitHub Actions build + test on every push/PR, green badge | `.github/workflows/ci.yml` |
 
@@ -146,7 +146,7 @@ dotnet build MiniHealthAgentRuntime.sln
 dotnet test                                                                 # 43 passing
 
 # The web app — opens a guided walkthrough at /, the live chat app at /app (offline, no keys)
-dotnet run --project src/CareTriageAgent.Web                                # then open the printed http://localhost:5xxx
+dotnet run --project src/HealthAgents.Web                                # then open the printed http://localhost:5xxx
 #   press Ctrl+C in this terminal to stop the server
 
 # Triage flows via the CLI (all offline, deterministic)
@@ -164,7 +164,7 @@ dotnet run --project src/CareTriageAgent.Cli -- --break-symptom-kb "sore throat"
 
 > **Just want the tour?** A self-contained **walkthrough page** explains the architecture and replays
 > the four behaviors (with trace trees) — no server needed. Open
-> `src/CareTriageAgent.Web/wwwroot/walkthrough.html` directly in a browser, or run the web app and
+> `src/HealthAgents.Web/wwwroot/walkthrough.html` directly in a browser, or run the web app and
 > visit `/` (the live chat app is at `/app`).
 
 ---
@@ -185,7 +185,7 @@ surface. Milestone 2 turns it into a **browser app** that runs the same runtime 
 │ └─────────────────────────┘ │ └──────────────────────────────────────┘
 ```
 
-> _Run `dotnet run --project src/CareTriageAgent.Web` and open the printed URL to see the live UI._
+> _Run `dotnet run --project src/HealthAgents.Web` and open the printed URL to see the live UI._
 <!-- Lead image: capture a screenshot of the browser UI and drop it in, e.g. docs/web-ui.png, then:
 ![Care Triage web UI — chat pane + live trace tree](docs/web-ui.png) -->
 

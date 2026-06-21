@@ -3,7 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 
-namespace CareTriageAgent.Web.Tests;
+namespace HealthAgents.Web.Tests;
 
 /// <summary>
 /// Boots the real web host in-memory with <see cref="WebApplicationFactory{T}"/> and drives it over

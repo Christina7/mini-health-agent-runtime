@@ -1,7 +1,7 @@
 using System.Net;
 using Microsoft.AspNetCore.Mvc.Testing;
 
-namespace CareTriageAgent.Web.Tests;
+namespace HealthAgents.Web.Tests;
 
 /// <summary>
 /// Pins the static-page routing: the guided walkthrough is the landing page at "/", and the live

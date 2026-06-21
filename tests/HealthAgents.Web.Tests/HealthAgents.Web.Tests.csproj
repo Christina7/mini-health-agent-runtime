@@ -22,7 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\CareTriageAgent.Web\CareTriageAgent.Web.csproj" />
+    <ProjectReference Include="..\..\src\HealthAgents.Web\HealthAgents.Web.csproj" />
   </ItemGroup>
 
 </Project>
