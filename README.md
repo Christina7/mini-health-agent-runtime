@@ -3,7 +3,7 @@
 [![CI](https://github.com/Christina7/mini-health-agent-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/Christina7/mini-health-agent-runtime/actions/workflows/ci.yml)
 
 A small, **runnable agent runtime** in C# / .NET 8 — a domain-agnostic orchestration core
-(`AgentRuntime`) hosting **two very different health agents**: a *reactive* **symptom-triage &
+(`AgentRuntime`) hosting **two very different health agents**: a *single-step* **symptom-triage &
 care-navigation** agent (`CareTriageAgent`) and a *multi-step* **health-planning** agent
 (`HealthPlanAgent`). One engine, two domains, neither aware of the other — that is the proof the core
 is domain-agnostic. It reproduces, in miniature, the architecture of a production agent platform: a
@@ -20,7 +20,7 @@ no network, and no database — all data is synthetic JSON in the repo.
 
 ---
 
-## The first agent — symptom triage (reactive)
+## The first agent — symptom triage (single-step)
 
 Type symptoms; the agent runs a triage turn and returns an **urgency level**
 (`SelfCare` / `SeeGp` / `UrgentCare` / `Emergency`), a recommended action, the tools it used, a
@@ -205,7 +205,7 @@ self-contained, navigable piece of the codebase:
 | Tool selection & invocation | `AgentRuntime/Tools/` | Tool registry + invocation strategy |
 | Distributed tracing | `AgentRuntime/Observability/` | OpenTelemetry spans: agent steps, tool chains, latency breakdown |
 | Safety invariant | `CareTriageAgent/Guardrails/RedFlagGuardrail.cs` · `HealthPlanAgent/Guardrails/UnsafeGoalGuardrail.cs` | An always-on guardrail per agent that config/flights cannot override |
-| Two agents, one runtime | `CareTriageAgent/` · `HealthPlanAgent/` (siblings on `AgentRuntime`) | The same engine drives a reactive one-tool agent and a multi-step, multi-tool one |
+| Two agents, one runtime | `CareTriageAgent/` · `HealthPlanAgent/` (siblings on `AgentRuntime`) | The same engine drives a single-step, one-tool agent and a multi-step, multi-tool one |
 
 ---
 
@@ -240,6 +240,12 @@ dotnet test                                                                 # 74
 dotnet run --project src/HealthAgents.Web                                # then open the printed http://localhost:5xxx
 #   press Ctrl+C in this terminal to stop the server
 
+# Health planner (Milestone 3, web-only) — drive it in the browser at /plan-app,
+# or hit the API directly (replace <port> with the one printed above):
+curl -s localhost:<port>/plan -H 'content-type: application/json' \
+  -d '{"action":"Create","goal":"LoseFat","profile":{"ageYears":30,"sex":"Male","weightKg":90,"heightCm":180,"activityLevel":"Moderate","targetDays":84,"goalWeightKg":80}}'
+#   → 2331 kcal/day · 144 g protein · 133-day timeline · 4-task checklist
+
 # Triage flows via the CLI (all offline, deterministic)
 dotnet run --project src/CareTriageAgent.Cli -- "sore throat and mild fever"           # SelfCare
 dotnet run --project src/CareTriageAgent.Cli -- "dizziness and abdominal pain"         # UrgentCare
@@ -253,10 +259,10 @@ dotnet run --project src/CareTriageAgent.Cli -- --flight disable-symptom-kb "sor
 dotnet run --project src/CareTriageAgent.Cli -- --break-symptom-kb "sore throat"       # ⚠ degraded, no crash
 ```
 
-> **Just want the tour?** A self-contained **walkthrough page** explains the architecture and replays
-> the four behaviors (with trace trees) — no server needed. Open
+> **Just want the tour?** A self-contained **walkthrough page** explains the architecture and **both
+> agents**, and replays triage's four behaviors with trace trees — no server needed. Open
 > `src/HealthAgents.Web/wwwroot/walkthrough.html` directly in a browser, or run the web app and
-> visit `/` (the live chat app is at `/app`).
+> visit `/` (triage chat at `/app`, the health planner at `/plan-app`).
 
 ---
 
@@ -284,6 +290,23 @@ The runtime itself doesn't change for the web surface — the host is a thin new
 `CareTriageSession`. That separation is the point: it's a **runtime**, not a script. (The one runtime
 edit during M2 was a bug fix: per-turn working state is now reset each turn so follow-ups are
 re-scored.)
+
+---
+
+## Milestone 3 — a second agent
+
+Milestone 3 is the payoff for calling this a *runtime* rather than a triage script: a **second,
+structurally different agent** — the multi-step health planner — running on the *same* core. Where
+triage is **single-step** and stateless (one tool, `message → card`), the planner **chains tools with
+real data dependencies** (`plan_generator` consumes `profile_analyzer`'s TDEE) and **accumulates a
+living artifact** across turns. The trace chains and the plan card are shown under
+[The second agent](#the-second-agent--health-planning-multi-step) above; drive it at `/plan-app` or
+via `POST /plan` (see the quick start).
+
+The headline result: the **only net-new _runtime_ code was one line** — the orchestrator's root-span
+name became a constructor argument (`"triage.turn"` vs `"plan.turn"`). The loop, trace renderer,
+session store, flight loader, degrade mapping, and JSON round-trip were all reused unchanged. That
+reuse *is* the domain-agnostic claim — demonstrated, not asserted.
 
 ### Future / not implemented
 
