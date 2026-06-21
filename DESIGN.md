@@ -295,10 +295,10 @@ POST /plan      → drives one turn through HealthPlanSession.SubmitAsync(PlanEn
 { "conversationId": "abc123",
   "reply": "Plan ready — a safe ~20% deficit; cap-bound to 133 days.",
   "plan": {                                        // null when the guardrail short-circuits
-    "goal": "LoseFat", "dailyCalorieTarget": 2331, "dailyProteinTargetGrams": 162, "timelineDays": 133,
+    "goal": "LoseFat", "dailyCalorieTarget": 2331, "dailyProteinTargetGrams": 144, "timelineDays": 133,
     "summary": "…", "tasks": [ { "category": "Nutrition", "description": "…" } ],
     "progress": [ { "day": 1, "caloriesLogged": 2200, "status": "Under", "tasksCompleted": 3,
-                    "tasksTotal": 4, "note": "On track — 131 kcal under." } ],
+                    "tasksTotal": 4, "note": "Under target — good, just don't undereat. 3/4 tasks done." } ],
     "degraded": false, "disclaimer": "Educational only — not medical advice." },
   "trace": { "name": "plan.turn", "durationMs": 2.6, "degraded": false, "children": [ … ] } }
 ```

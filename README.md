@@ -75,7 +75,7 @@ multi-tool chains become visible in the trace:
 ```
 ┌ Plan ───────────────────────────┐  ┌ Trace — create turn ─────────────────┐
 │  LOSE FAT                        │  │ ▾ plan.turn                2.6 ms ▕██▏ │
-│  2331 kcal/day · 162 g · 133 d   │  │   ▾ guardrail              0.1 ms ▕▏  │
+│  2331 kcal/day · 144 g · 133 d   │  │   ▾ guardrail              0.1 ms ▕▏  │
 │  A safe ~20% deficit; cap-bound  │  │   ▾ agent.step             1.0 ms ▕█▏ │
 │  ☐ Nutrition  hit protein target │  │     ▾ tool:profile_analyzer 0.4 ms ▕▌│
 │  ☐ Movement   8k steps           │  │   ▾ agent.step             0.7 ms ▕▋▏│
