@@ -20,7 +20,7 @@ public class TracingTests
     public async Task Turn_produces_a_trace_tree_of_steps_and_tool_calls()
     {
         var registry = new ToolRegistry(new ITool[] { new SymptomKnowledgeBaseTool(Kb) });
-        var orchestrator = new AgentOrchestrator(new MockTriagePlanner(Policy()), registry);
+        var orchestrator = new AgentOrchestrator(new MockTriagePlanner(Policy()), registry, rootSpanName: "triage.turn");
         var ctx = new WorkContext("conv-1");
 
         var turn = await orchestrator.RunTurnAsync(ctx, "sore throat", CancellationToken.None);

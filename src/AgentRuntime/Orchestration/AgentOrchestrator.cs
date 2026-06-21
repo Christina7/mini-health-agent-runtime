@@ -12,7 +12,9 @@ namespace AgentRuntime.Orchestration;
 /// plan -> act -> observe: ask the planner for the next step, either run a tool (recording its
 /// result as an observation) or finish. Tool execution goes through an <see cref="ExecutionScope"/>
 /// so a failing tool degrades the turn instead of throwing. Every turn emits a trace tree
-/// (triage.turn -> guardrail / agent.step -> tool) captured for observability.
+/// (the root span -> guardrail / agent.step -> tool) captured for observability. The root span
+/// name is supplied by the session (e.g. "triage.turn", "plan.turn"), so each agent's traces are
+/// rooted under its own name while the loop itself stays domain-agnostic.
 /// </summary>
 public sealed class AgentOrchestrator
 {
@@ -23,17 +25,20 @@ public sealed class AgentOrchestrator
     private readonly ToolRegistry _tools;
     private readonly IReadOnlyList<IGuardrail> _guardrails;
     private readonly ExecutionScope _scope;
+    private readonly string _rootSpanName;
 
     public AgentOrchestrator(
         ILlmClient planner,
         ToolRegistry tools,
         IEnumerable<IGuardrail>? guardrails = null,
-        ExecutionScope? scope = null)
+        ExecutionScope? scope = null,
+        string rootSpanName = "agent.turn")
     {
         _planner = planner;
         _tools = tools;
         _guardrails = (guardrails ?? Array.Empty<IGuardrail>()).ToList();
         _scope = scope ?? new ExecutionScope(maxRetries: 0);
+        _rootSpanName = rootSpanName;
     }
 
     public async Task<TurnResult> RunTurnAsync(WorkContext ctx, string userMessage, CancellationToken ct)
@@ -42,7 +47,7 @@ public sealed class AgentOrchestrator
 
         TurnResult result;
         var traceId = default(ActivityTraceId);
-        using (var turnActivity = RuntimeActivitySource.Source.StartActivity("triage.turn"))
+        using (var turnActivity = RuntimeActivitySource.Source.StartActivity(_rootSpanName))
         {
             if (turnActivity is not null)
             {
