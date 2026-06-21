@@ -4,8 +4,9 @@ namespace AgentRuntime.Context;
 
 /// <summary>
 /// Holds cross-turn conversation state for a single agent session. Domain-agnostic:
-/// the runtime never puts health-specific types here (the app uses the typed state bag,
-/// added in a later slice). Keyed by <see cref="ConversationId"/> by the host.
+/// the runtime never puts health-specific types here. Domain state lives in the host session
+/// instead (e.g. <c>HealthPlanSession</c>'s session-scoped holder), keeping this type pure.
+/// Keyed by <see cref="ConversationId"/> by the host.
 /// </summary>
 public sealed class WorkContext
 {

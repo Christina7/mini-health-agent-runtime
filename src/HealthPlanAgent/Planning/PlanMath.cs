@@ -22,10 +22,13 @@ public static class PlanMath
     public static double Tdee(HealthProfile p) => Bmr(p) * ActivityFactor(p.ActivityLevel);
 
     /// <summary>Body-mass index from the metric profile.</summary>
-    public static double Bmi(HealthProfile p)
+    public static double Bmi(HealthProfile p) => BmiAt(p.WeightKg, p.HeightCm);
+
+    /// <summary>BMI for an arbitrary weight at a given height — lets the guardrail check a goal weight.</summary>
+    public static double BmiAt(double weightKg, double heightCm)
     {
-        var heightM = p.HeightCm / 100.0;
-        return p.WeightKg / (heightM * heightM);
+        var heightM = heightCm / 100.0;
+        return weightKg / (heightM * heightM);
     }
 
     private static double ActivityFactor(ActivityLevel level) => level switch
