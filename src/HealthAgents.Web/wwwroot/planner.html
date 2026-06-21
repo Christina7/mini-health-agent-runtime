@@ -4,141 +4,209 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Health Planner — mini agent runtime</title>
+  <script>(function(){try{if(localStorage.getItem('theme')==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
   <style>
-    /* Shares the triage console's design language: a non-linear spacing scale, hierarchy by weight +
-       grays, borders replaced by background + layered shadow, one accent. Self-contained, no build. */
+    /* Linear design language (voltagent/awesome-design-md · linear.app): a near-black canvas (#010102)
+       with a four-step surface ladder for hierarchy, 1px hairline borders instead of shadows, the single
+       lavender-blue accent (#5e6ad2) reserved for the brand mark / primary CTA / focus / one badge, and
+       display type set with aggressive negative tracking. Health-status semantics keep their own muted,
+       dark-tuned hues. Self-contained — no web fonts, no build step. */
     :root {
-      --g-0: #f7f8fa; --g-50: #f1f5f9; --g-100: #e8edf3; --g-150: #dde4ec;
-      --g-200: #cbd5e1; --g-400: #94a3b8; --g-500: #64748b; --g-600: #475569;
-      --g-700: #334155; --g-900: #111a2b;
-      --ink: var(--g-900); --muted: var(--g-500); --faint: var(--g-400);
-      --accent: #4f46e5; --accent-600: #4338ca; --accent-50: #eef2ff; --accent-ring: #c7d2fe;
-      --under-bg: #eff6ff; --under-fg: #1d4ed8; --under-line: #3b82f6;
-      --on-bg: #ecfdf5; --on-fg: #047857; --on-line: #10b981;
-      --over-bg: #fff7ed; --over-fg: #c2410c; --over-line: #f97316;
-      --emergency-bg: #fef2f2; --emergency-fg: #b91c1c; --emergency-line: #ef4444;
-      --degraded-bg: #fffbeb; --degraded-fg: #b45309; --degraded-line: #f59e0b;
-      --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
-      --t-xs: 12px; --t-sm: 13px; --t-base: 15px; --t-md: 16px; --t-lg: 18px; --t-xl: 22px;
-      --r-sm: 6px; --r: 10px; --r-lg: 14px; --r-pill: 999px;
-      --sh-sm: 0 1px 2px rgba(15,23,42,.06), 0 1px 1px rgba(15,23,42,.05);
-      --sh-md: 0 2px 4px rgba(15,23,42,.05), 0 6px 16px rgba(15,23,42,.08);
-      --font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      /* surface ladder (dark) */
+      --canvas: #010102; --surface-1: #0f1011; --surface-2: #141516; --surface-3: #18191a;
+      --hairline: #23252a; --hairline-strong: #34343a; --hairline-tertiary: #3e3e44;
+      /* ink */
+      --ink: #f7f8f8; --ink-muted: #d0d6e0; --ink-subtle: #8a8f98; --ink-tertiary: #62666d;
+      /* single chromatic accent — lavender-blue */
+      --accent: #5e6ad2; --accent-hover: #828fff; --accent-focus: #5e69d1; --accent-soft: rgba(94,106,210,.16);
+      /* health-status semantics (dark-tuned: translucent tint bg, bright fg) */
+      --under-bg: rgba(59,130,246,.15); --under-fg: #7aa2ff; --under-line: #3b82f6;
+      --on-bg: rgba(39,166,68,.16); --on-fg: #4ade80; --on-line: #27a644;
+      --over-bg: rgba(249,115,22,.15); --over-fg: #fb923c; --over-line: #f97316;
+      --emergency-bg: rgba(239,68,68,.16); --emergency-fg: #f87171; --emergency-line: #ef4444;
+      --degraded-bg: rgba(245,158,11,.13); --degraded-fg: #fbbf4d; --degraded-line: #f59e0b;
+      /* spacing (4px base) */
+      --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+      /* type */
+      --t-xs: 12px; --t-sm: 13px; --t-base: 14px; --t-md: 15px; --t-lg: 18px; --t-xl: 24px; --t-2xl: 30px;
+      /* radius (Linear: 8px controls, 12px cards — never pill CTAs) */
+      --r-xs: 4px; --r-sm: 6px; --r: 8px; --r-lg: 12px; --r-xl: 16px; --r-pill: 999px;
+      /* depth: hairline + a faint top edge highlight; real shadow only on popovers */
+      --edge: inset 0 1px 0 rgba(255,255,255,.045);
+      --trace-bg: #0b0c0d;
+      --sh-pop: 0 12px 32px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.5);
+      --font: -apple-system, system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Menlo, Consolas, monospace;
     }
+    /* Light theme — the same Linear structure (hairlines, surface ladder, lavender accent) inverted
+       onto a white canvas. Only the tokens change; every component rule reads through them. */
+    [data-theme="light"] {
+      --canvas: #ffffff; --surface-1: #f6f7f9; --surface-2: #eef0f3; --surface-3: #e5e8ec;
+      --hairline: #e3e6ea; --hairline-strong: #d3d7dd; --hairline-tertiary: #c2c7cf;
+      --ink: #16181d; --ink-muted: #393d46; --ink-subtle: #696e78; --ink-tertiary: #9aa0aa;
+      --accent: #5e6ad2; --accent-hover: #4f5ac4; --accent-focus: #5e69d1; --accent-soft: rgba(94,106,210,.12);
+      --under-bg: #eff4ff; --under-fg: #1d4ed8; --under-line: #3b82f6;
+      --on-bg: #ecfdf3; --on-fg: #047857; --on-line: #10b981;
+      --over-bg: #fff4ed; --over-fg: #c2410c; --over-line: #f97316;
+      --emergency-bg: #fef2f2; --emergency-fg: #b91c1c; --emergency-line: #ef4444;
+      --degraded-bg: #fffbeb; --degraded-fg: #b45309; --degraded-line: #f59e0b;
+      --edge: 0 1px 2px rgba(16,24,40,.05); --trace-bg: #fafbfc;
+    }
+    .theme-toggle { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; cursor: pointer;
+      border: none; border-radius: var(--r); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hairline);
+      color: var(--ink-subtle); transition: color .12s, background .12s; }
+    .theme-toggle:hover { color: var(--ink); background: var(--surface-3); }
+    .theme-toggle .sun { display: block; } .theme-toggle .moon { display: none; }
+    [data-theme="light"] .theme-toggle .sun { display: none; } [data-theme="light"] .theme-toggle .moon { display: block; }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
     body { margin: 0; font-family: var(--font); font-size: var(--t-base); color: var(--ink);
-      background: var(--g-0); line-height: 1.5; display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased; }
+      background: var(--canvas); line-height: 1.5; letter-spacing: -.05px;
+      display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased; }
+    ::selection { background: var(--accent-soft); }
 
-    .appbar { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s5); background: #fff; box-shadow: var(--sh-sm); z-index: 3; }
+    /* ── App bar ───────────────────────────────────────────── */
+    .appbar { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s5);
+      background: var(--canvas); box-shadow: inset 0 -1px 0 var(--hairline); z-index: 3; }
     .brand { display: flex; align-items: center; gap: var(--s3); margin-right: auto; }
-    .brand .mark { width: 34px; height: 34px; border-radius: var(--r); display: grid; place-items: center;
-      background: linear-gradient(135deg, var(--accent), #7c6cf0); color: #fff; box-shadow: var(--sh-sm); }
-    .brand .title { font-size: var(--t-lg); font-weight: 700; letter-spacing: -.01em; }
-    .brand .sub { font-size: var(--t-xs); color: var(--muted); font-weight: 500; }
-    .pill { display: inline-flex; align-items: center; gap: var(--s1); font-size: var(--t-xs); font-weight: 600;
-      padding: var(--s1) var(--s3); border-radius: var(--r-pill); background: var(--g-50); color: var(--g-600); text-decoration: none; }
-    .pill.warn { background: var(--degraded-bg); color: var(--degraded-fg); }
+    .brand .mark { width: 32px; height: 32px; border-radius: var(--r); display: grid; place-items: center;
+      background: linear-gradient(155deg, var(--accent-hover), var(--accent)); color: #fff; box-shadow: var(--edge); }
+    .brand .title { font-size: var(--t-lg); font-weight: 600; letter-spacing: -.4px; }
+    .brand .sub { font-size: var(--t-xs); color: var(--ink-subtle); font-weight: 400; }
+    .pill { display: inline-flex; align-items: center; gap: var(--s1); font-size: var(--t-xs); font-weight: 500;
+      padding: var(--s1) var(--s3); border-radius: var(--r-pill); background: var(--surface-2);
+      box-shadow: inset 0 0 0 1px var(--hairline); color: var(--ink-muted); text-decoration: none; transition: color .12s, background .12s; }
+    a.pill:hover { color: var(--ink); background: var(--surface-3); }
+    .pill.warn { background: var(--degraded-bg); color: var(--degraded-fg); box-shadow: inset 0 0 0 1px rgba(245,158,11,.25); }
 
+    /* ── Toolbar ───────────────────────────────────────────── */
     .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s2) var(--s5);
-      background: var(--g-50); box-shadow: inset 0 -1px 0 var(--g-100); z-index: 2; }
-    .toolbar .label { font-size: var(--t-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-right: var(--s1); }
-    .chip-toggle { display: inline-flex; align-items: center; gap: var(--s2); cursor: pointer; font-size: var(--t-sm); font-weight: 500; color: var(--g-600);
-      padding: var(--s1) var(--s3); border-radius: var(--r-pill); background: #fff; box-shadow: var(--sh-sm); transition: background .12s, color .12s; user-select: none; }
-    .chip-toggle:hover { color: var(--ink); }
+      background: var(--canvas); box-shadow: inset 0 -1px 0 var(--hairline); z-index: 2; }
+    .toolbar .label { font-size: var(--t-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-tertiary); margin-right: var(--s1); }
+    .chip-toggle { display: inline-flex; align-items: center; gap: var(--s2); cursor: pointer; font-size: var(--t-sm); font-weight: 500; color: var(--ink-subtle);
+      padding: var(--s1) var(--s3); border-radius: var(--r); background: var(--surface-1); box-shadow: inset 0 0 0 1px var(--hairline);
+      transition: background .12s, color .12s, box-shadow .12s; user-select: none; }
+    .chip-toggle:hover { color: var(--ink-muted); background: var(--surface-2); }
     .chip-toggle input { accent-color: var(--accent); margin: 0; }
-    .chip-toggle:has(input:checked) { background: var(--accent-50); color: var(--accent-600); box-shadow: inset 0 0 0 1px var(--accent-ring); }
+    .chip-toggle:has(input:checked) { background: var(--accent-soft); color: var(--accent-hover); box-shadow: inset 0 0 0 1px var(--accent-focus); }
     .chip-toggle code { font-family: var(--mono); font-size: var(--t-xs); }
-    .btn-ghost { font: inherit; font-size: var(--t-sm); font-weight: 600; color: var(--g-600); cursor: pointer;
-      padding: var(--s1) var(--s3); border-radius: var(--r-pill); background: #fff; border: none; box-shadow: var(--sh-sm); }
-    .btn-ghost:hover { color: var(--ink); box-shadow: var(--sh-md); }
-    .toolbar .meta { margin-left: auto; font-size: var(--t-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+    .btn-ghost { font: inherit; font-size: var(--t-sm); font-weight: 500; color: var(--ink-subtle); cursor: pointer;
+      padding: var(--s1) var(--s3); border-radius: var(--r); background: var(--surface-1); border: none; box-shadow: inset 0 0 0 1px var(--hairline); transition: color .12s, background .12s; }
+    .btn-ghost:hover { color: var(--ink); background: var(--surface-2); }
+    .toolbar .meta { margin-left: auto; font-size: var(--t-xs); color: var(--ink-subtle); font-variant-numeric: tabular-nums; }
 
+    /* ── Two-pane shell ────────────────────────────────────── */
     main { flex: 1; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); min-height: 0; }
     @media (max-width: 900px) { main { grid-template-columns: 1fr; } #trace { display: none; } }
     .pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
-    #console { background: var(--g-0); box-shadow: 1px 0 0 var(--g-100); }
-    #trace { background: #fff; }
+    #console { background: var(--canvas); box-shadow: 1px 0 0 var(--hairline); }
+    #trace { background: var(--trace-bg); }
     .pane-head { display: flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s5);
-      font-size: var(--t-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
-    .pane-head .dot { width: 7px; height: 7px; border-radius: var(--r-pill); background: var(--g-200); }
-    .scroll { flex: 1; overflow-y: auto; padding: var(--s4) var(--s5) var(--s5); }
+      font-size: var(--t-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-tertiary); }
+    .pane-head .dot { width: 6px; height: 6px; border-radius: var(--r-pill); background: var(--hairline-strong); }
+    .scroll { flex: 1; overflow-y: auto; padding: var(--s4) var(--s5) var(--s6); }
     .scroll::-webkit-scrollbar { width: 10px; }
-    .scroll::-webkit-scrollbar-thumb { background: var(--g-150); border-radius: var(--r-pill); border: 3px solid transparent; background-clip: content-box; }
+    .scroll::-webkit-scrollbar-thumb { background: var(--hairline-strong); border-radius: var(--r-pill); border: 3px solid transparent; background-clip: content-box; }
+    .scroll::-webkit-scrollbar-thumb:hover { background: var(--hairline-tertiary); }
 
-    /* ── Goal form ─────────────────────────────────────────── */
-    .panel { background: #fff; border-radius: var(--r-lg); box-shadow: var(--sh-md); padding: var(--s4); margin-bottom: var(--s4); }
-    .panel h2 { margin: 0 0 var(--s3); font-size: var(--t-md); font-weight: 700; }
+    /* ── Panels & form ─────────────────────────────────────── */
+    .panel { background: var(--surface-1); border-radius: var(--r-lg); box-shadow: inset 0 0 0 1px var(--hairline), var(--edge); padding: var(--s5); margin-bottom: var(--s4); }
+    .panel h2 { margin: 0 0 var(--s4); font-size: var(--t-md); font-weight: 600; letter-spacing: -.2px; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
     .field { display: flex; flex-direction: column; gap: var(--s1); }
     .field.full { grid-column: 1 / -1; }
-    .field label { font-size: var(--t-xs); font-weight: 600; color: var(--muted); }
+    .field label { font-size: var(--t-xs); font-weight: 500; color: var(--ink-subtle); }
     .field input, .field select { font: inherit; font-size: var(--t-sm); padding: var(--s2) var(--s3); color: var(--ink);
-      background: #fff; border: none; border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--g-200); }
-    .field input:focus, .field select:focus { outline: none; box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-ring); }
-    .btn { font: inherit; font-size: var(--t-md); font-weight: 600; color: #fff; cursor: pointer; padding: var(--s3) var(--s5);
-      border: none; border-radius: var(--r-pill); background: linear-gradient(135deg, var(--accent), #6d5cf0); box-shadow: var(--sh-sm); }
-    .btn:hover { filter: brightness(1.06); }
-    .btn:disabled { opacity: .55; cursor: default; filter: none; }
-    .btn.secondary { background: #fff; color: var(--accent-600); box-shadow: inset 0 0 0 1px var(--accent-ring); }
-    .row-actions { display: flex; gap: var(--s2); align-items: center; margin-top: var(--s4); }
+      background: var(--surface-2); border: none; border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--hairline); transition: box-shadow .12s; }
+    .field input:hover, .field select:hover { box-shadow: inset 0 0 0 1px var(--hairline-strong); }
+    .field input:focus, .field select:focus { outline: none; box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-soft); }
+    .field select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8f98' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right var(--s3) center; padding-right: var(--s6); }
+    .btn { font: inherit; font-size: var(--t-sm); font-weight: 500; color: #fff; cursor: pointer; padding: var(--s2) var(--s4); min-height: 36px;
+      border: none; border-radius: var(--r); background: var(--accent); box-shadow: var(--edge); transition: background .12s, opacity .12s; }
+    .btn:hover { background: var(--accent-hover); }
+    .btn:active { background: var(--accent-focus); }
+    .btn:disabled { opacity: .5; cursor: default; background: var(--accent); }
+    .btn.secondary { background: var(--surface-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--hairline-strong); }
+    .btn.secondary:hover { background: var(--surface-3); }
+    .row-actions { display: flex; gap: var(--s3); align-items: center; margin-top: var(--s5); }
+    .hint { font-size: var(--t-sm); color: var(--ink-subtle); }
+    .hint.error { color: var(--emergency-fg); }
 
     /* ── Plan card ─────────────────────────────────────────── */
-    .plan { border-top: 3px solid var(--accent); }
-    .plan .badge-row { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s3); }
-    .badge { font-size: var(--t-xs); font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
-      padding: var(--s1) var(--s3); border-radius: var(--r-pill); color: #fff; background: var(--accent); }
-    .degraded-tag { font-size: var(--t-xs); font-weight: 600; padding: var(--s1) var(--s2); border-radius: var(--r-pill); background: var(--degraded-bg); color: var(--degraded-fg); }
-    .metrics { display: flex; gap: var(--s5); margin-bottom: var(--s3); }
-    .metric .num { font-size: var(--t-xl); font-weight: 700; font-variant-numeric: tabular-nums; }
-    .metric .lab { font-size: var(--t-xs); color: var(--muted); }
-    .summary { color: var(--g-700); margin-bottom: var(--s3); }
-    .tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); }
-    .tasks li { display: flex; align-items: flex-start; gap: var(--s2); font-size: var(--t-sm); }
-    .tasks input { margin-top: 3px; accent-color: var(--accent); }
-    .tasks .cat { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--accent-600);
-      background: var(--accent-50); padding: 1px var(--s2); border-radius: var(--r-sm); flex: none; }
-    .disclaimer { margin-top: var(--s3); padding-top: var(--s3); box-shadow: inset 0 1px 0 var(--g-100); font-size: var(--t-xs); color: var(--muted); }
+    .plan { box-shadow: inset 0 0 0 1px var(--hairline), inset 0 2px 0 var(--accent), var(--edge); }
+    .plan.is-degraded { box-shadow: inset 0 0 0 1px var(--hairline), inset 0 2px 0 var(--degraded-line), var(--edge); }
+    .badge-row { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s4); }
+    .badge { font-size: var(--t-xs); font-weight: 600; letter-spacing: .3px; text-transform: uppercase;
+      padding: var(--s1) var(--s3); border-radius: var(--r-sm); color: #fff; background: var(--accent); }
+    .degraded-tag { font-size: var(--t-xs); font-weight: 500; padding: var(--s1) var(--s2); border-radius: var(--r-sm);
+      background: var(--degraded-bg); color: var(--degraded-fg); box-shadow: inset 0 0 0 1px rgba(245,158,11,.25); margin-left: auto; }
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s3); margin-bottom: var(--s4); }
+    .metric { background: var(--surface-2); border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--hairline); padding: var(--s3) var(--s4); }
+    .metric .num { font-size: var(--t-xl); font-weight: 600; letter-spacing: -.8px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+    .metric .lab { font-size: var(--t-xs); color: var(--ink-subtle); margin-top: var(--s1); }
+    .summary { color: var(--ink-muted); margin-bottom: var(--s4); line-height: 1.55; }
+    .tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s1); }
+    .tasks li { display: flex; align-items: flex-start; gap: var(--s3); font-size: var(--t-sm); color: var(--ink-muted);
+      padding: var(--s2) var(--s2); border-radius: var(--r); transition: background .12s; }
+    .tasks li:hover { background: var(--surface-2); }
+    .tasks input { margin: 2px 0 0; accent-color: var(--accent); width: 15px; height: 15px; flex: none; cursor: pointer; }
+    .tasks .cat { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: var(--ink-muted);
+      background: var(--surface-3); box-shadow: inset 0 0 0 1px var(--hairline); padding: 2px var(--s2); border-radius: var(--r-xs); flex: none; }
+    .disclaimer { margin-top: var(--s4); padding-top: var(--s3); box-shadow: inset 0 1px 0 var(--hairline); font-size: var(--t-xs); color: var(--ink-tertiary); }
 
     /* ── Progress ──────────────────────────────────────────── */
     .progress-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); }
-    .entry { display: flex; align-items: center; gap: var(--s3); font-size: var(--t-sm); padding: var(--s2) var(--s3); border-radius: var(--r); background: var(--g-50); }
-    .entry .day { font-weight: 700; flex: none; }
-    .entry .status { font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 1px var(--s2); border-radius: var(--r-sm); flex: none; }
+    .entry { display: flex; align-items: center; gap: var(--s3); font-size: var(--t-sm); color: var(--ink-muted);
+      padding: var(--s2) var(--s3); border-radius: var(--r); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--hairline); }
+    .entry .day { font-weight: 600; color: var(--ink); flex: none; font-variant-numeric: tabular-nums; }
+    .entry .status { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; padding: 2px var(--s2); border-radius: var(--r-xs); flex: none; }
     .status.under { background: var(--under-bg); color: var(--under-fg); }
     .status.on { background: var(--on-bg); color: var(--on-fg); }
     .status.over { background: var(--over-bg); color: var(--over-fg); }
-    .entry .note { color: var(--muted); }
-    .empty { color: var(--faint); font-size: var(--t-sm); }
+    .entry .nums { font-variant-numeric: tabular-nums; color: var(--ink-subtle); }
+    .entry .note { color: var(--ink-tertiary); margin-left: auto; text-align: right; }
+    .empty { color: var(--ink-tertiary); font-size: var(--t-sm); text-align: center; padding: var(--s4) 0; }
 
-    /* ── Trace tree (shared with the triage console) ───────── */
+    /* ── Loading / skeleton states ─────────────────────────── */
+    @keyframes shimmer { 0% { background-position: -360px 0; } 100% { background-position: 360px 0; } }
+    .sk { border-radius: var(--r-sm); background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 40%, var(--surface-2) 80%);
+      background-size: 600px 100%; animation: shimmer 1.3s infinite linear; }
+    .sk-line { height: 12px; margin-bottom: var(--s2); }
+    .sk-metric { height: 58px; border-radius: var(--r); }
+    .pane-head .dot.live { background: var(--accent); box-shadow: 0 0 0 0 var(--accent-soft); animation: pulse 1.4s infinite; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 var(--accent-soft); } 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+    /* ── Trace tree ────────────────────────────────────────── */
     #trace .scroll { font-family: var(--mono); font-size: var(--t-sm); }
-    .node > .row { display: flex; align-items: center; gap: var(--s2); padding: var(--s1) 0; border-radius: var(--r-sm); }
-    .node > .row:hover { background: var(--g-50); }
-    .caret { width: 16px; flex: none; text-align: center; color: var(--faint); cursor: pointer; user-select: none; }
+    .node > .row { display: flex; align-items: center; gap: var(--s2); padding: var(--s1) var(--s1); border-radius: var(--r-sm); }
+    .node > .row:hover { background: var(--surface-1); }
+    .caret { width: 16px; flex: none; text-align: center; color: var(--ink-tertiary); cursor: pointer; user-select: none; }
     .caret.leaf { visibility: hidden; }
-    .span-pill { font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; padding: 1px var(--s2);
-      border-radius: var(--r-sm); background: var(--g-100); color: var(--g-600); flex: none; }
+    .span-pill { font-size: 10px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; padding: 2px var(--s2);
+      border-radius: var(--r-xs); background: var(--surface-3); color: var(--ink-subtle); flex: none; }
     .node.tool .span-pill { background: var(--under-bg); color: var(--under-fg); }
     .node.guardrail .span-pill { background: var(--over-bg); color: var(--over-fg); }
+    .node.turn .span-pill { background: var(--accent-soft); color: var(--accent-hover); }
     .node.degraded .span-pill { background: var(--emergency-bg); color: var(--emergency-fg); }
-    .node .name { flex: none; color: var(--g-700); }
+    .node .name { flex: none; color: var(--ink-muted); }
     .node.degraded .name { color: var(--emergency-fg); font-weight: 600; }
-    .bar-wrap { flex: 1; min-width: 36px; height: 6px; background: var(--g-100); border-radius: var(--r-pill); overflow: hidden; }
-    .bar { height: 100%; border-radius: var(--r-pill); background: linear-gradient(90deg, #818cf8, var(--accent)); }
-    .node.degraded .bar { background: linear-gradient(90deg, #fca5a5, var(--emergency-line)); }
-    .dur { flex: none; min-width: 62px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
-    .children { margin-left: var(--s4); padding-left: var(--s2); box-shadow: inset 1px 0 0 var(--g-100); }
+    .bar-wrap { flex: 1; min-width: 36px; height: 5px; background: var(--surface-3); border-radius: var(--r-pill); overflow: hidden; }
+    .bar { height: 100%; border-radius: var(--r-pill); background: linear-gradient(90deg, var(--accent), var(--accent-hover)); }
+    .node.degraded .bar { background: linear-gradient(90deg, var(--emergency-line), #fca5a5); }
+    .dur { flex: none; min-width: 62px; text-align: right; color: var(--ink-tertiary); font-variant-numeric: tabular-nums; }
+    .children { margin-left: var(--s4); padding-left: var(--s2); box-shadow: inset 1px 0 0 var(--hairline); }
     .node.collapsed > .children { display: none; }
-    .trace-empty { display: grid; place-items: center; gap: var(--s3); height: 100%; color: var(--faint); text-align: center; }
+    .trace-empty { display: grid; place-items: center; gap: var(--s3); height: 100%; color: var(--ink-tertiary); text-align: center; padding: var(--s5); }
+    .trace-empty svg { opacity: .45; }
+    .trace-empty code { font-family: var(--mono); color: var(--ink-subtle); }
   </style>
 </head>
 <body>
   <div class="appbar">
     <div class="brand">
       <span class="mark" aria-hidden="true">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 21s-7-4.35-9.5-8.5C.5 9 2 5.5 5.5 5.5c2 0 3.5 1.5 4.5 3 1-1.5 2.5-3 4.5-3C18 5.5 19.5 9 17.5 12.5 15 16.65 12 21 12 21z"/>
         </svg>
       </span>
@@ -147,6 +215,10 @@
         <div class="sub">a second agent on the same runtime</div>
       </span>
     </div>
+    <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark / light theme" title="Toggle theme">
+      <svg class="sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg class="moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
     <a class="pill" href="/app">Triage agent →</a>
     <span class="pill warn">⚠ Educational only — not medical advice</span>
   </div>
@@ -187,7 +259,7 @@
           </div>
           <div class="row-actions">
             <button class="btn" id="create">Create plan</button>
-            <span class="meta" id="hint"></span>
+            <span class="hint" id="hint"></span>
           </div>
         </div>
         <div id="results"></div>
@@ -195,7 +267,7 @@
     </section>
 
     <section class="pane" id="trace">
-      <div class="pane-head"><span class="dot"></span> Trace · last turn</div>
+      <div class="pane-head"><span class="dot" id="traceDot"></span> Trace · last turn</div>
       <div class="scroll" id="tracetree">
         <div class="trace-empty">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -210,7 +282,7 @@
   <script>
     const AVAILABLE_FLIGHTS = ['aggressive-plan', 'conservative-plan'];
     const $ = id => document.getElementById(id);
-    const resultsEl = $('results'), traceEl = $('tracetree'), metaEl = $('meta'), breakEl = document.querySelector('input[data-break]');
+    const resultsEl = $('results'), traceEl = $('tracetree'), metaEl = $('meta'), traceDot = $('traceDot'), breakEl = document.querySelector('input[data-break]');
 
     let conversationId = null, currentPlan = null;
 
@@ -227,14 +299,23 @@
     });
 
     // Any runtime-setting change needs a fresh session (the server fixes config at session creation).
-    function resetConversation(msg) { conversationId = null; currentPlan = null; resultsEl.innerHTML = ''; renderTrace(null); updateMeta(); if (msg) $('hint').textContent = msg; }
+    function resetConversation(msg) { conversationId = null; currentPlan = null; resultsEl.innerHTML = ''; renderTrace(null); updateMeta(); setHint(msg || ''); }
     breakEl.addEventListener('change', () => resetConversation('Setting changed — next "Create plan" starts a fresh session.'));
     document.querySelectorAll('input[data-flight]').forEach(el => el.addEventListener('change', () => resetConversation('Flight changed — next "Create plan" starts a fresh session.')));
     $('reset').addEventListener('click', () => resetConversation(''));
     $('create').addEventListener('click', createPlan);
 
+    // Dark (default) ⇄ light, persisted. The pre-paint script in <head> applies the saved choice.
+    $('themeToggle').addEventListener('click', () => {
+      const light = document.documentElement.getAttribute('data-theme') === 'light';
+      if (light) document.documentElement.removeAttribute('data-theme');
+      else document.documentElement.setAttribute('data-theme', 'light');
+      try { localStorage.setItem('theme', light ? 'dark' : 'light'); } catch (e) {}
+    });
+
     function currentFlights() { return Array.from(document.querySelectorAll('input[data-flight]:checked')).map(el => el.dataset.flight); }
     function updateMeta() { metaEl.textContent = conversationId ? `conversation ${conversationId.slice(0,8)} · ${currentPlan ? currentPlan.progress.length : 0} days logged` : 'no plan yet'; }
+    function setHint(msg, isError) { const h = $('hint'); h.textContent = msg; h.className = 'hint' + (isError ? ' error' : ''); }
     function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
     async function post(body) {
@@ -244,6 +325,22 @@
       return data;
     }
 
+    // Skeleton while a turn is in flight — gives the console an honest "working" state.
+    function renderLoading(label) {
+      traceDot.classList.add('live');
+      resultsEl.innerHTML = `
+        <div class="panel plan">
+          <div class="badge-row"><span class="sk" style="width:96px;height:20px;border-radius:6px"></span></div>
+          <div class="metrics">
+            <div class="sk sk-metric"></div><div class="sk sk-metric"></div><div class="sk sk-metric"></div>
+          </div>
+          <div class="sk sk-line" style="width:92%"></div>
+          <div class="sk sk-line" style="width:76%"></div>
+          <div class="sk sk-line" style="width:84%;margin-bottom:0"></div>
+        </div>`;
+      traceEl.innerHTML = `<div class="trace-empty"><span>Running <code>${escapeHtml(label)}</code>…</span></div>`;
+    }
+
     async function createPlan() {
       const goal = $('goal').value;
       const profile = {
@@ -251,37 +348,44 @@
         activityLevel: $('activity').value, targetDays: +$('targetDays').value,
         goalWeightKg: goal === 'LoseFat' ? +$('goalWeight').value : null,
       };
-      $('create').disabled = true; $('hint').textContent = '';
+      $('create').disabled = true; setHint('');
+      renderLoading('plan.turn · create');
       try {
         const data = await post({ conversationId, action: 'Create', goal, profile, flights: currentFlights(), breakPlanGenerator: breakEl.checked });
         conversationId = data.conversationId; currentPlan = data.plan;
         render(data);
-      } catch (e) { $('hint').textContent = '⚠ ' + e.message; }
-      finally { $('create').disabled = false; }
+      } catch (e) { resultsEl.innerHTML = ''; renderTrace(null); setHint('⚠ ' + e.message, true); }
+      finally { $('create').disabled = false; traceDot.classList.remove('live'); }
     }
 
     async function logDay() {
       const caloriesLogged = +$('logCalories').value;
       const tasksCompleted = document.querySelectorAll('#planCard .tasks input:checked').length;
+      const btn = $('logBtn'); if (btn) btn.disabled = true;
+      traceDot.classList.add('live');
       try {
         const data = await post({ conversationId, action: 'Log', log: { caloriesLogged, tasksCompleted } });
         currentPlan = data.plan;
         render(data);
-      } catch (e) { $('hint').textContent = '⚠ ' + e.message; }
+      } catch (e) { setHint('⚠ ' + e.message, true); }
+      finally { traceDot.classList.remove('live'); }
     }
 
     function render(data) {
       const plan = data.plan;
       updateMeta();
-      if (!plan) { resultsEl.innerHTML = `<div class="panel"><div class="badge-row"><span class="degraded-tag">no plan</span></div><div class="summary">${escapeHtml(data.reply)}</div></div>`; renderTrace(data.trace); return; }
+      if (!plan) {
+        resultsEl.innerHTML = `<div class="panel plan is-degraded"><div class="badge-row"><span class="degraded-tag" style="margin-left:0">no plan</span></div><div class="summary" style="margin-bottom:0">${escapeHtml(data.reply)}</div></div>`;
+        renderTrace(data.trace); return;
+      }
 
       const tasks = (plan.tasks || []).map(t => `<li><input type="checkbox" /><span class="cat">${escapeHtml(t.category)}</span><span>${escapeHtml(t.description)}</span></li>`).join('');
       const progress = (plan.progress || []).map(p =>
-        `<li class="entry"><span class="day">Day ${p.day}</span><span class="status ${p.status.toLowerCase()}">${escapeHtml(p.status)}</span><span>${p.caloriesLogged} kcal · ${p.tasksCompleted}/${p.tasksTotal} tasks</span><span class="note">${escapeHtml(p.note)}</span></li>`).join('');
+        `<li class="entry"><span class="day">Day ${p.day}</span><span class="status ${p.status.toLowerCase()}">${escapeHtml(p.status)}</span><span class="nums">${p.caloriesLogged} kcal · ${p.tasksCompleted}/${p.tasksTotal} tasks</span><span class="note">${escapeHtml(p.note)}</span></li>`).join('');
       const degraded = plan.degraded ? `<span class="degraded-tag">⚠ degraded — safe fallback</span>` : '';
 
       resultsEl.innerHTML = `
-        <div class="panel plan" id="planCard">
+        <div class="panel plan${plan.degraded ? ' is-degraded' : ''}" id="planCard">
           <div class="badge-row"><span class="badge">${escapeHtml(plan.goal)}</span>${degraded}</div>
           <div class="metrics">
             <div class="metric"><div class="num">${plan.dailyCalorieTarget}</div><div class="lab">kcal / day</div></div>
@@ -298,11 +402,11 @@
             <div class="field"><label>Calories eaten</label><input id="logCalories" type="number" value="${plan.dailyCalorieTarget}" /></div>
             <div class="field" style="justify-content:flex-end"><button class="btn secondary" id="logBtn">Log day</button></div>
           </div>
-          <p class="meta" style="margin:var(--s2) 0 0">Tick the tasks above you completed, then log the day.</p>
+          <p class="hint" style="margin:var(--s3) 0 0">Tick the tasks above you completed, then log the day.</p>
         </div>
         <div class="panel">
           <h2>Progress</h2>
-          <ul class="progress-list">${progress || '<li class="empty">No days logged yet.</li>'}</ul>
+          <ul class="progress-list">${progress || '<li class="empty">No days logged yet — log your first day above.</li>'}</ul>
         </div>`;
       $('logBtn').addEventListener('click', logDay);
       renderTrace(data.trace);
@@ -310,7 +414,14 @@
 
     function renderTrace(node) {
       traceEl.innerHTML = '';
-      if (!node) { traceEl.innerHTML = '<div class="trace-empty"><span>The <code>plan.turn</code> trace tree renders here after each turn.</span></div>'; return; }
+      if (!node) {
+        traceEl.innerHTML = `<div class="trace-empty">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M6.5 10v4h7.5M10 17.5h4"/>
+          </svg>
+          <span>The <code>plan.turn</code> trace tree renders here after each turn.</span></div>`;
+        return;
+      }
       traceEl.appendChild(buildNode(node, node.durationMs || 1));
     }
     function spanKind(name) {
