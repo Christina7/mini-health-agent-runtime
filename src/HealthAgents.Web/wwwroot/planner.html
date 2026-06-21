@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Health Planner — mini agent runtime</title>
+  <style>
+    /* Shares the triage console's design language: a non-linear spacing scale, hierarchy by weight +
+       grays, borders replaced by background + layered shadow, one accent. Self-contained, no build. */
+    :root {
+      --g-0: #f7f8fa; --g-50: #f1f5f9; --g-100: #e8edf3; --g-150: #dde4ec;
+      --g-200: #cbd5e1; --g-400: #94a3b8; --g-500: #64748b; --g-600: #475569;
+      --g-700: #334155; --g-900: #111a2b;
+      --ink: var(--g-900); --muted: var(--g-500); --faint: var(--g-400);
+      --accent: #4f46e5; --accent-600: #4338ca; --accent-50: #eef2ff; --accent-ring: #c7d2fe;
+      --under-bg: #eff6ff; --under-fg: #1d4ed8; --under-line: #3b82f6;
+      --on-bg: #ecfdf5; --on-fg: #047857; --on-line: #10b981;
+      --over-bg: #fff7ed; --over-fg: #c2410c; --over-line: #f97316;
+      --emergency-bg: #fef2f2; --emergency-fg: #b91c1c; --emergency-line: #ef4444;
+      --degraded-bg: #fffbeb; --degraded-fg: #b45309; --degraded-line: #f59e0b;
+      --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+      --t-xs: 12px; --t-sm: 13px; --t-base: 15px; --t-md: 16px; --t-lg: 18px; --t-xl: 22px;
+      --r-sm: 6px; --r: 10px; --r-lg: 14px; --r-pill: 999px;
+      --sh-sm: 0 1px 2px rgba(15,23,42,.06), 0 1px 1px rgba(15,23,42,.05);
+      --sh-md: 0 2px 4px rgba(15,23,42,.05), 0 6px 16px rgba(15,23,42,.08);
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { margin: 0; font-family: var(--font); font-size: var(--t-base); color: var(--ink);
+      background: var(--g-0); line-height: 1.5; display: flex; flex-direction: column; overflow: hidden; -webkit-font-smoothing: antialiased; }
+
+    .appbar { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s5); background: #fff; box-shadow: var(--sh-sm); z-index: 3; }
+    .brand { display: flex; align-items: center; gap: var(--s3); margin-right: auto; }
+    .brand .mark { width: 34px; height: 34px; border-radius: var(--r); display: grid; place-items: center;
+      background: linear-gradient(135deg, var(--accent), #7c6cf0); color: #fff; box-shadow: var(--sh-sm); }
+    .brand .title { font-size: var(--t-lg); font-weight: 700; letter-spacing: -.01em; }
+    .brand .sub { font-size: var(--t-xs); color: var(--muted); font-weight: 500; }
+    .pill { display: inline-flex; align-items: center; gap: var(--s1); font-size: var(--t-xs); font-weight: 600;
+      padding: var(--s1) var(--s3); border-radius: var(--r-pill); background: var(--g-50); color: var(--g-600); text-decoration: none; }
+    .pill.warn { background: var(--degraded-bg); color: var(--degraded-fg); }
+
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s2) var(--s5);
+      background: var(--g-50); box-shadow: inset 0 -1px 0 var(--g-100); z-index: 2; }
+    .toolbar .label { font-size: var(--t-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); margin-right: var(--s1); }
+    .chip-toggle { display: inline-flex; align-items: center; gap: var(--s2); cursor: pointer; font-size: var(--t-sm); font-weight: 500; color: var(--g-600);
+      padding: var(--s1) var(--s3); border-radius: var(--r-pill); background: #fff; box-shadow: var(--sh-sm); transition: background .12s, color .12s; user-select: none; }
+    .chip-toggle:hover { color: var(--ink); }
+    .chip-toggle input { accent-color: var(--accent); margin: 0; }
+    .chip-toggle:has(input:checked) { background: var(--accent-50); color: var(--accent-600); box-shadow: inset 0 0 0 1px var(--accent-ring); }
+    .chip-toggle code { font-family: var(--mono); font-size: var(--t-xs); }
+    .btn-ghost { font: inherit; font-size: var(--t-sm); font-weight: 600; color: var(--g-600); cursor: pointer;
+      padding: var(--s1) var(--s3); border-radius: var(--r-pill); background: #fff; border: none; box-shadow: var(--sh-sm); }
+    .btn-ghost:hover { color: var(--ink); box-shadow: var(--sh-md); }
+    .toolbar .meta { margin-left: auto; font-size: var(--t-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    main { flex: 1; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); min-height: 0; }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } #trace { display: none; } }
+    .pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+    #console { background: var(--g-0); box-shadow: 1px 0 0 var(--g-100); }
+    #trace { background: #fff; }
+    .pane-head { display: flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s5);
+      font-size: var(--t-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+    .pane-head .dot { width: 7px; height: 7px; border-radius: var(--r-pill); background: var(--g-200); }
+    .scroll { flex: 1; overflow-y: auto; padding: var(--s4) var(--s5) var(--s5); }
+    .scroll::-webkit-scrollbar { width: 10px; }
+    .scroll::-webkit-scrollbar-thumb { background: var(--g-150); border-radius: var(--r-pill); border: 3px solid transparent; background-clip: content-box; }
+
+    /* ── Goal form ─────────────────────────────────────────── */
+    .panel { background: #fff; border-radius: var(--r-lg); box-shadow: var(--sh-md); padding: var(--s4); margin-bottom: var(--s4); }
+    .panel h2 { margin: 0 0 var(--s3); font-size: var(--t-md); font-weight: 700; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+    .field { display: flex; flex-direction: column; gap: var(--s1); }
+    .field.full { grid-column: 1 / -1; }
+    .field label { font-size: var(--t-xs); font-weight: 600; color: var(--muted); }
+    .field input, .field select { font: inherit; font-size: var(--t-sm); padding: var(--s2) var(--s3); color: var(--ink);
+      background: #fff; border: none; border-radius: var(--r); box-shadow: inset 0 0 0 1px var(--g-200); }
+    .field input:focus, .field select:focus { outline: none; box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-ring); }
+    .btn { font: inherit; font-size: var(--t-md); font-weight: 600; color: #fff; cursor: pointer; padding: var(--s3) var(--s5);
+      border: none; border-radius: var(--r-pill); background: linear-gradient(135deg, var(--accent), #6d5cf0); box-shadow: var(--sh-sm); }
+    .btn:hover { filter: brightness(1.06); }
+    .btn:disabled { opacity: .55; cursor: default; filter: none; }
+    .btn.secondary { background: #fff; color: var(--accent-600); box-shadow: inset 0 0 0 1px var(--accent-ring); }
+    .row-actions { display: flex; gap: var(--s2); align-items: center; margin-top: var(--s4); }
+
+    /* ── Plan card ─────────────────────────────────────────── */
+    .plan { border-top: 3px solid var(--accent); }
+    .plan .badge-row { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s3); }
+    .badge { font-size: var(--t-xs); font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+      padding: var(--s1) var(--s3); border-radius: var(--r-pill); color: #fff; background: var(--accent); }
+    .degraded-tag { font-size: var(--t-xs); font-weight: 600; padding: var(--s1) var(--s2); border-radius: var(--r-pill); background: var(--degraded-bg); color: var(--degraded-fg); }
+    .metrics { display: flex; gap: var(--s5); margin-bottom: var(--s3); }
+    .metric .num { font-size: var(--t-xl); font-weight: 700; font-variant-numeric: tabular-nums; }
+    .metric .lab { font-size: var(--t-xs); color: var(--muted); }
+    .summary { color: var(--g-700); margin-bottom: var(--s3); }
+    .tasks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); }
+    .tasks li { display: flex; align-items: flex-start; gap: var(--s2); font-size: var(--t-sm); }
+    .tasks input { margin-top: 3px; accent-color: var(--accent); }
+    .tasks .cat { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--accent-600);
+      background: var(--accent-50); padding: 1px var(--s2); border-radius: var(--r-sm); flex: none; }
+    .disclaimer { margin-top: var(--s3); padding-top: var(--s3); box-shadow: inset 0 1px 0 var(--g-100); font-size: var(--t-xs); color: var(--muted); }
+
+    /* ── Progress ──────────────────────────────────────────── */
+    .progress-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); }
+    .entry { display: flex; align-items: center; gap: var(--s3); font-size: var(--t-sm); padding: var(--s2) var(--s3); border-radius: var(--r); background: var(--g-50); }
+    .entry .day { font-weight: 700; flex: none; }
+    .entry .status { font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 1px var(--s2); border-radius: var(--r-sm); flex: none; }
+    .status.under { background: var(--under-bg); color: var(--under-fg); }
+    .status.on { background: var(--on-bg); color: var(--on-fg); }
+    .status.over { background: var(--over-bg); color: var(--over-fg); }
+    .entry .note { color: var(--muted); }
+    .empty { color: var(--faint); font-size: var(--t-sm); }
+
+    /* ── Trace tree (shared with the triage console) ───────── */
+    #trace .scroll { font-family: var(--mono); font-size: var(--t-sm); }
+    .node > .row { display: flex; align-items: center; gap: var(--s2); padding: var(--s1) 0; border-radius: var(--r-sm); }
+    .node > .row:hover { background: var(--g-50); }
+    .caret { width: 16px; flex: none; text-align: center; color: var(--faint); cursor: pointer; user-select: none; }
+    .caret.leaf { visibility: hidden; }
+    .span-pill { font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; padding: 1px var(--s2);
+      border-radius: var(--r-sm); background: var(--g-100); color: var(--g-600); flex: none; }
+    .node.tool .span-pill { background: var(--under-bg); color: var(--under-fg); }
+    .node.guardrail .span-pill { background: var(--over-bg); color: var(--over-fg); }
+    .node.degraded .span-pill { background: var(--emergency-bg); color: var(--emergency-fg); }
+    .node .name { flex: none; color: var(--g-700); }
+    .node.degraded .name { color: var(--emergency-fg); font-weight: 600; }
+    .bar-wrap { flex: 1; min-width: 36px; height: 6px; background: var(--g-100); border-radius: var(--r-pill); overflow: hidden; }
+    .bar { height: 100%; border-radius: var(--r-pill); background: linear-gradient(90deg, #818cf8, var(--accent)); }
+    .node.degraded .bar { background: linear-gradient(90deg, #fca5a5, var(--emergency-line)); }
+    .dur { flex: none; min-width: 62px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .children { margin-left: var(--s4); padding-left: var(--s2); box-shadow: inset 1px 0 0 var(--g-100); }
+    .node.collapsed > .children { display: none; }
+    .trace-empty { display: grid; place-items: center; gap: var(--s3); height: 100%; color: var(--faint); text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="appbar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 21s-7-4.35-9.5-8.5C.5 9 2 5.5 5.5 5.5c2 0 3.5 1.5 4.5 3 1-1.5 2.5-3 4.5-3C18 5.5 19.5 9 17.5 12.5 15 16.65 12 21 12 21z"/>
+        </svg>
+      </span>
+      <span>
+        <div class="title">Health Planner</div>
+        <div class="sub">a second agent on the same runtime</div>
+      </span>
+    </div>
+    <a class="pill" href="/app">Triage agent →</a>
+    <span class="pill warn">⚠ Educational only — not medical advice</span>
+  </div>
+
+  <div class="toolbar">
+    <span class="label">Demo</span>
+    <label class="chip-toggle"><input type="checkbox" data-break /> Break plan generator</label>
+    <span id="flight-toggles" style="display:contents"></span>
+    <button class="btn-ghost" id="reset">↻ New plan</button>
+    <span class="meta" id="meta">no plan yet</span>
+  </div>
+
+  <main>
+    <section class="pane" id="console">
+      <div class="pane-head"><span class="dot"></span> Planner</div>
+      <div class="scroll">
+        <div class="panel" id="goalPanel">
+          <h2>Set a goal</h2>
+          <div class="grid">
+            <div class="field full"><label>Goal</label>
+              <select id="goal">
+                <option value="LoseFat">Lose fat</option>
+                <option value="ImproveSleep">Improve sleep</option>
+                <option value="BoostEnergy">Boost energy</option>
+              </select>
+            </div>
+            <div class="field"><label>Age (years)</label><input id="age" type="number" value="30" /></div>
+            <div class="field"><label>Sex</label><select id="sex"><option>Male</option><option>Female</option></select></div>
+            <div class="field"><label>Weight (kg)</label><input id="weight" type="number" value="90" /></div>
+            <div class="field"><label>Height (cm)</label><input id="height" type="number" value="180" /></div>
+            <div class="field"><label>Activity</label>
+              <select id="activity">
+                <option>Sedentary</option><option>Light</option><option selected>Moderate</option><option>Active</option><option value="VeryActive">Very active</option>
+              </select>
+            </div>
+            <div class="field"><label>Target (days)</label><input id="targetDays" type="number" value="84" /></div>
+            <div class="field full" id="goalWeightField"><label>Goal weight (kg)</label><input id="goalWeight" type="number" value="80" /></div>
+          </div>
+          <div class="row-actions">
+            <button class="btn" id="create">Create plan</button>
+            <span class="meta" id="hint"></span>
+          </div>
+        </div>
+        <div id="results"></div>
+      </div>
+    </section>
+
+    <section class="pane" id="trace">
+      <div class="pane-head"><span class="dot"></span> Trace · last turn</div>
+      <div class="scroll" id="tracetree">
+        <div class="trace-empty">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M6.5 10v4h7.5M10 17.5h4"/>
+          </svg>
+          <span>The <code>plan.turn</code> trace tree renders here after each turn.</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const AVAILABLE_FLIGHTS = ['aggressive-plan', 'conservative-plan'];
+    const $ = id => document.getElementById(id);
+    const resultsEl = $('results'), traceEl = $('tracetree'), metaEl = $('meta'), breakEl = document.querySelector('input[data-break]');
+
+    let conversationId = null, currentPlan = null;
+
+    for (const name of AVAILABLE_FLIGHTS) {
+      const label = document.createElement('label');
+      label.className = 'chip-toggle';
+      label.innerHTML = `<input type="checkbox" data-flight="${name}" /> <code>${name}</code>`;
+      $('flight-toggles').appendChild(label);
+    }
+
+    // Goal weight only matters for fat loss; hide it otherwise.
+    $('goal').addEventListener('change', () => {
+      $('goalWeightField').style.display = $('goal').value === 'LoseFat' ? '' : 'none';
+    });
+
+    // Any runtime-setting change needs a fresh session (the server fixes config at session creation).
+    function resetConversation(msg) { conversationId = null; currentPlan = null; resultsEl.innerHTML = ''; renderTrace(null); updateMeta(); if (msg) $('hint').textContent = msg; }
+    breakEl.addEventListener('change', () => resetConversation('Setting changed — next "Create plan" starts a fresh session.'));
+    document.querySelectorAll('input[data-flight]').forEach(el => el.addEventListener('change', () => resetConversation('Flight changed — next "Create plan" starts a fresh session.')));
+    $('reset').addEventListener('click', () => resetConversation(''));
+    $('create').addEventListener('click', createPlan);
+
+    function currentFlights() { return Array.from(document.querySelectorAll('input[data-flight]:checked')).map(el => el.dataset.flight); }
+    function updateMeta() { metaEl.textContent = conversationId ? `conversation ${conversationId.slice(0,8)} · ${currentPlan ? currentPlan.progress.length : 0} days logged` : 'no plan yet'; }
+    function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+    async function post(body) {
+      const res = await fetch('/plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+      return data;
+    }
+
+    async function createPlan() {
+      const goal = $('goal').value;
+      const profile = {
+        ageYears: +$('age').value, sex: $('sex').value, weightKg: +$('weight').value, heightCm: +$('height').value,
+        activityLevel: $('activity').value, targetDays: +$('targetDays').value,
+        goalWeightKg: goal === 'LoseFat' ? +$('goalWeight').value : null,
+      };
+      $('create').disabled = true; $('hint').textContent = '';
+      try {
+        const data = await post({ conversationId, action: 'Create', goal, profile, flights: currentFlights(), breakPlanGenerator: breakEl.checked });
+        conversationId = data.conversationId; currentPlan = data.plan;
+        render(data);
+      } catch (e) { $('hint').textContent = '⚠ ' + e.message; }
+      finally { $('create').disabled = false; }
+    }
+
+    async function logDay() {
+      const caloriesLogged = +$('logCalories').value;
+      const tasksCompleted = document.querySelectorAll('#planCard .tasks input:checked').length;
+      try {
+        const data = await post({ conversationId, action: 'Log', log: { caloriesLogged, tasksCompleted } });
+        currentPlan = data.plan;
+        render(data);
+      } catch (e) { $('hint').textContent = '⚠ ' + e.message; }
+    }
+
+    function render(data) {
+      const plan = data.plan;
+      updateMeta();
+      if (!plan) { resultsEl.innerHTML = `<div class="panel"><div class="badge-row"><span class="degraded-tag">no plan</span></div><div class="summary">${escapeHtml(data.reply)}</div></div>`; renderTrace(data.trace); return; }
+
+      const tasks = (plan.tasks || []).map(t => `<li><input type="checkbox" /><span class="cat">${escapeHtml(t.category)}</span><span>${escapeHtml(t.description)}</span></li>`).join('');
+      const progress = (plan.progress || []).map(p =>
+        `<li class="entry"><span class="day">Day ${p.day}</span><span class="status ${p.status.toLowerCase()}">${escapeHtml(p.status)}</span><span>${p.caloriesLogged} kcal · ${p.tasksCompleted}/${p.tasksTotal} tasks</span><span class="note">${escapeHtml(p.note)}</span></li>`).join('');
+      const degraded = plan.degraded ? `<span class="degraded-tag">⚠ degraded — safe fallback</span>` : '';
+
+      resultsEl.innerHTML = `
+        <div class="panel plan" id="planCard">
+          <div class="badge-row"><span class="badge">${escapeHtml(plan.goal)}</span>${degraded}</div>
+          <div class="metrics">
+            <div class="metric"><div class="num">${plan.dailyCalorieTarget}</div><div class="lab">kcal / day</div></div>
+            <div class="metric"><div class="num">${plan.dailyProteinTargetGrams}</div><div class="lab">g protein</div></div>
+            <div class="metric"><div class="num">${plan.timelineDays}</div><div class="lab">days</div></div>
+          </div>
+          <div class="summary">${escapeHtml(plan.summary)}</div>
+          <ul class="tasks">${tasks}</ul>
+          <div class="disclaimer">${escapeHtml(plan.disclaimer || 'Educational only — not medical advice.')}</div>
+        </div>
+        <div class="panel">
+          <h2>Log a day</h2>
+          <div class="grid">
+            <div class="field"><label>Calories eaten</label><input id="logCalories" type="number" value="${plan.dailyCalorieTarget}" /></div>
+            <div class="field" style="justify-content:flex-end"><button class="btn secondary" id="logBtn">Log day</button></div>
+          </div>
+          <p class="meta" style="margin:var(--s2) 0 0">Tick the tasks above you completed, then log the day.</p>
+        </div>
+        <div class="panel">
+          <h2>Progress</h2>
+          <ul class="progress-list">${progress || '<li class="empty">No days logged yet.</li>'}</ul>
+        </div>`;
+      $('logBtn').addEventListener('click', logDay);
+      renderTrace(data.trace);
+    }
+
+    function renderTrace(node) {
+      traceEl.innerHTML = '';
+      if (!node) { traceEl.innerHTML = '<div class="trace-empty"><span>The <code>plan.turn</code> trace tree renders here after each turn.</span></div>'; return; }
+      traceEl.appendChild(buildNode(node, node.durationMs || 1));
+    }
+    function spanKind(name) {
+      if (name.startsWith('tool:')) return { cls: 'tool', pill: 'tool', label: name.slice(5) };
+      if (name === 'guardrail') return { cls: 'guardrail', pill: 'guard', label: 'guardrail' };
+      if (name === 'agent.step') return { cls: 'step', pill: 'step', label: 'agent.step' };
+      if (name === 'plan.turn') return { cls: 'turn', pill: 'turn', label: 'plan.turn' };
+      return { cls: 'span', pill: 'span', label: name };
+    }
+    function buildNode(node, rootDuration) {
+      const kind = spanKind(node.name);
+      const wrap = document.createElement('div');
+      wrap.className = `node ${node.degraded ? 'degraded' : kind.cls}`;
+      const hasChildren = node.children && node.children.length;
+      const pct = Math.max(3, Math.min(100, (node.durationMs / rootDuration) * 100));
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `
+        <span class="caret ${hasChildren ? '' : 'leaf'}">▾</span>
+        <span class="span-pill">${escapeHtml(kind.pill)}</span>
+        <span class="name">${escapeHtml(kind.label)}${node.degraded ? ' ⚠' : ''}</span>
+        <span class="bar-wrap"><span class="bar" style="width:${pct}%"></span></span>
+        <span class="dur">${node.durationMs.toFixed(2)} ms</span>`;
+      wrap.appendChild(row);
+      if (hasChildren) {
+        const kids = document.createElement('div');
+        kids.className = 'children';
+        for (const child of node.children) kids.appendChild(buildNode(child, rootDuration));
+        wrap.appendChild(kids);
+        const caret = row.querySelector('.caret');
+        caret.addEventListener('click', () => { wrap.classList.toggle('collapsed'); caret.textContent = wrap.classList.contains('collapsed') ? '▸' : '▾'; });
+      }
+      return wrap;
+    }
+
+    updateMeta();
+  </script>
+</body>
+</html>

@@ -54,8 +54,8 @@ var planConfigProvider = new RuntimeConfigProvider(
     File.ReadAllText(Path.Combine(planConfigDir, "runtimeconfig.json")), planFlights);
 var planSessions = new PlanSessionStore();
 
-HealthPlanSession BuildPlanSession(string conversationId, string[]? activeFlights) =>
-    new(planConfigProvider.Resolve<HealthPlanConfig>(activeFlights ?? Array.Empty<string>()), conversationId);
+HealthPlanSession BuildPlanSession(string conversationId, string[]? activeFlights, bool breakPlanGenerator) =>
+    new(planConfigProvider.Resolve<HealthPlanConfig>(activeFlights ?? Array.Empty<string>()), conversationId, breakPlanGenerator);
 
 // Build a fresh session for a conversation from its requested flights / broken-tool toggle. Flights
 // are allow-listed by RuntimeConfigProvider (an unknown name throws ArgumentException) so the browser
@@ -80,6 +80,7 @@ app.UseStaticFiles();
 var webRoot = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
 app.MapGet("/", () => Results.File(Path.Combine(webRoot, "walkthrough.html"), "text/html"));
 app.MapGet("/app", () => Results.File(Path.Combine(webRoot, "index.html"), "text/html"));
+app.MapGet("/plan-app", () => Results.File(Path.Combine(webRoot, "planner.html"), "text/html"));
 
 app.MapPost("/triage", async (TriageRequest request, CancellationToken ct) =>
 {
@@ -146,7 +147,8 @@ app.MapPost("/plan", async (PlanRequest request, CancellationToken ct) =>
     HealthPlanSession session;
     try
     {
-        session = planSessions.GetOrCreate(conversationId, () => BuildPlanSession(conversationId, request.Flights));
+        session = planSessions.GetOrCreate(
+            conversationId, () => BuildPlanSession(conversationId, request.Flights, request.BreakPlanGenerator ?? false));
     }
     catch (ArgumentException ex)
     {
@@ -212,7 +214,8 @@ namespace HealthAgents.Web
         HealthGoal? Goal = null,
         HealthProfile? Profile = null,
         DayLog? Log = null,
-        string[]? Flights = null);
+        string[]? Flights = null,
+        bool? BreakPlanGenerator = null);
 
     /// <summary>POST /plan response. <see cref="Plan"/> is null when the guardrail short-circuits.</summary>
     public sealed record PlanResponse(

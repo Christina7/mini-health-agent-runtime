@@ -113,6 +113,32 @@ public class PlanEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.True(aggressive < conservative, $"aggressive {aggressive} should be < conservative {conservative}");
     }
 
+    [Fact]
+    public async Task Break_plan_generator_degrades_without_crashing()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/plan", new
+        {
+            conversationId = "conv-broken",
+            action = "Create",
+            goal = "LoseFat",
+            breakPlanGenerator = true,
+            profile = new
+            {
+                ageYears = 30, sex = "Male", weightKg = 90.0, heightCm = 180.0,
+                activityLevel = "Moderate", targetDays = 84, goalWeightKg = 80.0,
+            },
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode); // degrades, never 500
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.True(body.GetProperty("degraded").GetBoolean());
+        Assert.True(body.GetProperty("plan").GetProperty("degraded").GetBoolean());
+        Assert.Contains("plan_generator", body.GetProperty("trace").GetRawText()); // the failed tool is in the trace
+    }
+
     private static async Task<int> CalorieTargetWithFlight(HttpClient client, string conversationId, string flight)
     {
         var body = new
