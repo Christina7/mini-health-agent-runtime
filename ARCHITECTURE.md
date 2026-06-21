@@ -15,12 +15,17 @@ through them. For the original design rationale, contracts, and schemas, see [DE
 Three layers, each depending only on the one below it:
 
 ```
-  HealthAgents.Web   ·   CareTriageAgent.Cli      ← thin hosts (HTTP / console). No agent logic.
-        |                        |
-  CareTriageAgent   +   HealthPlanAgent           ← two HEALTH domains: siblings on the runtime
-        \                       /
-                AgentRuntime                       ← domain-agnostic runtime: the reusable core
+  HealthAgents.Web─┬───────────────────┐   CareTriageAgent.Cli   ← thin hosts (HTTP / console)
+                   │                   │            │
+                   ▼                   ▼            │
+            HealthPlanAgent     CareTriageAgent ◄───┘            ← two HEALTH domains: siblings
+                   └─────────┬─────────┘
+                       AgentRuntime                              ← domain-agnostic reusable core
 ```
+
+The Web host serves **both** agents (`POST /plan` → `HealthPlanAgent`, `POST /triage` →
+`CareTriageAgent`); the CLI serves **triage only**. The two domains are siblings — neither
+references the other; both depend only on `AgentRuntime`.
 
 - **`AgentRuntime`** is the reusable core. It knows nothing about health — it owns the agent loop,
   the tool/guardrail/LLM abstractions, config + flights, the failure framework, the work-context
