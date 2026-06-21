@@ -101,6 +101,9 @@
     .layer .d { color:var(--ink-subtle); font-size:var(--t-sm); margin-top:var(--s1); }
     .layer.hosts { background:var(--surface-1); }
     .layer.domain { background:var(--accent-soft); box-shadow:inset 0 0 0 1px var(--accent-focus), var(--edge); margin:0 var(--s6); }
+    .domains { display:grid; grid-template-columns:1fr 1fr; gap:var(--s3); margin:0 var(--s6); }
+    .domains .layer.domain { margin:0; }
+    @media (max-width:560px){ .domains { grid-template-columns:1fr; } }
     .layer.domain .d { color:var(--ink-muted); }
     .layer.core { background:linear-gradient(135deg,#1c1f4a,#2a2c6b); box-shadow:inset 0 0 0 1px var(--hairline-strong), var(--edge); color:#fff; margin:0 var(--s7); }
     .layer.core .d { color:#c7d2fe; }
@@ -209,11 +212,12 @@
   <header class="hero">
     <div class="wrap">
       <span class="eyebrow">C# · .NET 8 · runs offline</span>
-      <h1>A runnable mini <em>agent runtime</em>, with a health triage agent on top.</h1>
+      <h1>A runnable mini <em>agent runtime</em>, with two health agents on top.</h1>
       <p class="lede">A domain-agnostic orchestration core — reason→act→observe loop, config-driven
         flights, a failure/degradation framework, a work-context store, safety guardrails, and
-        OpenTelemetry tracing — reproduced in miniature. A symptom-triage agent is the sample domain,
-        and a browser app visualizes the per-turn trace tree.</p>
+        OpenTelemetry tracing — reproduced in miniature. Two very different agents run on the same
+        core: a single-step symptom-triage agent and a multi-step health planner — and a browser app
+        visualizes the per-turn trace tree.</p>
       <div class="cta">
         <a class="btn primary" href="/app" data-live>Open the live app</a>
         <a class="btn ghost" href="https://github.com/Christina7/mini-health-agent-runtime">View on GitHub</a>
@@ -225,22 +229,29 @@
   <section id="architecture">
     <div class="wrap">
       <div class="kicker">Architecture</div>
-      <h2>A reusable core, a health domain, two thin hosts</h2>
+      <h2>A reusable core, two health domains, two thin hosts</h2>
       <p class="section-lede">The runtime knows nothing about health — it could host any agent. All
-        health specifics live one layer up. Two hosts (a web app and a CLI) drive the exact same
-        composition root; neither contains agent logic. That separation is the whole point: it's a
-        <strong>runtime</strong>, not a triage script.</p>
+        health specifics live one layer up, in <strong>two sibling domains</strong> that never
+        reference each other. Two hosts drive the same composition roots; neither contains agent
+        logic. That separation is the whole point: it's a <strong>runtime</strong>, not a triage
+        script — and the second agent is the proof.</p>
       <div class="stack">
         <div class="layer hosts">
           <div class="h">HealthAgents.Web &nbsp;·&nbsp; CareTriageAgent.Cli</div>
-          <div class="d">Thin hosts. The web host marshals HTTP ↔ runtime (<code>POST /triage</code>) and returns the serialized trace; the CLI feeds one message.</div>
+          <div class="d">Thin hosts. The web host marshals HTTP ↔ runtime and serves <strong>both</strong> agents (<code>POST /triage</code> + <code>POST /plan</code>); the CLI feeds one triage message. Neither contains agent logic.</div>
         </div>
-        <div class="arrow">▼ both call the same <code>CareTriageSession.OnUserMessageAsync</code></div>
-        <div class="layer domain">
-          <div class="h">CareTriageAgent · the health domain</div>
-          <div class="d">Symptom knowledge base, red-flag guardrail, deterministic planner, triage policy, shared data. The composition root wires the runtime to the domain.</div>
+        <div class="arrow">▼ Web → both sessions &nbsp;·&nbsp; CLI → <code>CareTriageSession</code> only</div>
+        <div class="domains">
+          <div class="layer domain">
+            <div class="h">CareTriageAgent · single-step triage</div>
+            <div class="d">Symptom KB, red-flag guardrail, deterministic planner, triage policy. One turn, root span <code>triage.turn</code>.</div>
+          </div>
+          <div class="layer domain">
+            <div class="h">HealthPlanAgent · multi-step planner</div>
+            <div class="d"><code>profile_analyzer → plan_generator → task_decomposer</code> (plus a log chain); typed <code>PlanEnvelope</code>, <code>UnsafeGoalGuardrail</code>. Root span <code>plan.turn</code>.</div>
+          </div>
         </div>
-        <div class="arrow">▼ built on</div>
+        <div class="arrow">▼ both built on</div>
         <div class="layer core">
           <div class="h">AgentRuntime · domain-agnostic core</div>
           <div class="d">Orchestrator loop · tools · guardrail hook · config + JSON-Patch flights · failure framework · work context · OpenTelemetry tracing. Zero health knowledge.</div>
@@ -284,7 +295,7 @@
     <div class="wrap">
       <div class="kicker">How it was built</div>
       <h2>Test-first, in vertical slices</h2>
-      <p class="section-lede">Each slice left the repo green and runnable; each was one merged PR. 43
+      <p class="section-lede">Each slice left the repo green and runnable; each was one merged PR. 74
         unit + integration tests pin every behavior (xUnit + Moq + WebApplicationFactory), run on CI.</p>
       <div class="timeline" id="timeline"></div>
     </div>
@@ -298,7 +309,7 @@
       <div class="terminal">
 <span class="c"># build &amp; test</span><br>
 <span class="p">$</span> dotnet build MiniHealthAgentRuntime.sln<br>
-<span class="p">$</span> dotnet test <span class="c"># 43 passing</span><br><br>
+<span class="p">$</span> dotnet test <span class="c"># 74 passing</span><br><br>
 <span class="c"># the web app — walkthrough at /, live chat app at /app</span><br>
 <span class="p">$</span> dotnet run --project src/HealthAgents.Web <span class="c"># open the printed http://localhost:5xxx</span><br>
 <span class="c">&nbsp;&nbsp;# press Ctrl+C in this terminal to stop the server</span><br><br>
@@ -461,10 +472,17 @@
       [14,'Browser UI: triage card + trace tree + toolbar (+ per-turn state fix)'],
       [15,'CI: GitHub Actions build/test + badge'],[16,'Docs: ARCHITECTURE.md + README refresh'],
       [17,'UI refresh: modern design (Refactoring UI)'],
+      ['M3','Milestone 3 — a second agent (multi-step health planning, same runtime)'],
+      [18,'Second-agent skeleton: HealthPlanAgent library + the one runtime change (parameterized root span)'],
+      [19,'Create chain: profile_analyzer → plan_generator → task_decomposer (consumes the analyzer\'s TDEE; deficit-cap)'],
+      [20,'Log chain + living artifact: nutrition_calculator → progress_evaluator; typed PlanEnvelope accumulates'],
+      [21,'Composition root + safety: HealthPlanSession threads the artifact; UnsafeGoalGuardrail wired unconditionally'],
+      [22,'Web + flights + console: POST /plan + PlanSessionStore; aggressive/conservative flights; /plan-app + degrade demo'],
+      [23,'Linear UI theme + dark/light toggle across triage, planner, and this walkthrough'],
     ];
     const tl = document.getElementById('timeline');
     for (const [n,label] of SLICES) {
-      if (n==='M1' || n==='M2') { const h=document.createElement('div'); h.className='ms-label'; h.textContent=label; tl.appendChild(h); continue; }
+      if (typeof n === 'string' && n[0]==='M') { const h=document.createElement('div'); h.className='ms-label'; h.textContent=label; tl.appendChild(h); continue; }
       const row = document.createElement('div'); row.className='slice';
       row.innerHTML = `<div class="n">${n}</div><div class="b">${escapeHtml(label)}</div>`;
       tl.appendChild(row);
