@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\AgentRuntime\AgentRuntime.csproj" />
     <ProjectReference Include="..\..\src\CareTriageAgent\CareTriageAgent.csproj" />
+    <ProjectReference Include="..\..\src\HealthPlanAgent\HealthPlanAgent.csproj" />
   </ItemGroup>
 
 </Project>
