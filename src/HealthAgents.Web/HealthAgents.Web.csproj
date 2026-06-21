@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\CareTriageAgent\CareTriageAgent.csproj" />
+    <ProjectReference Include="..\HealthPlanAgent\HealthPlanAgent.csproj" />
     <ProjectReference Include="..\AgentRuntime\AgentRuntime.csproj" />
   </ItemGroup>
 
