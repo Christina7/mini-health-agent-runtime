@@ -259,6 +259,14 @@ dotnet run --project src/CareTriageAgent.Cli -- --flight disable-symptom-kb "sor
 dotnet run --project src/CareTriageAgent.Cli -- --break-symptom-kb "sore throat"       # ⚠ degraded, no crash
 ```
 
+> **Windows: stop the host before rebuilding.** Always `Ctrl+C` the web host before a `dotnet build`
+> / `dotnet run`. A still-running host keeps `HealthAgents.Web.dll` (and `AgentRuntime.dll`) locked, so
+> a rebuild fails with `MSB3027 … file locked by HealthAgents.Web (PID …)`. If you hit it, kill the
+> orphaned process and rebuild:
+> ```powershell
+> Get-Process -Name HealthAgents.Web -ErrorAction SilentlyContinue | Stop-Process -Force
+> ```
+
 > **Just want the tour?** A self-contained **walkthrough page** explains the architecture and **both
 > agents**, and replays triage's four behaviors with trace trees — no server needed. Open
 > `src/HealthAgents.Web/wwwroot/walkthrough.html` directly in a browser, or run the web app and
