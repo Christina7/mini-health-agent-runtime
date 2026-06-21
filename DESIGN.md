@@ -266,6 +266,47 @@ POST /triage                → drives one turn through CareTriageSession.OnUser
 - **Flights are allow-listed:** the request may name overlays that exist in `config/flights/`; it cannot post arbitrary JSON-Patch paths (so the browser can't disable the safety guardrail — and there is no guardrail toggle to begin with). This keeps the Safety invariant intact over HTTP.
 - **Errors:** a `CompliantException` thrown server-side maps to a 200 response carrying the `UserSafeMessage` and `degraded:true` (the user never sees internal detail) — the HTTP analogue of DegradedResponse; unexpected exceptions map to a 500 with a generic safe message.
 
+### HTTP contract — `POST /plan` (the health planner)
+The second agent (`HealthPlanAgent`) runs on the **same runtime** through its own composition root (`HealthPlanSession`) and its own session store (a verbatim copy of the triage one). The host exposes it at `GET /plan-app` (the planner console) and `POST /plan`.
+
+The request body is a **typed envelope**, *not* a chat string. The host deserializes it into a `PlanEnvelope` and hands it to the session out-of-band — so `WorkContext.History` records only a short human line ("Create plan: LoseFat, goal 80 kg in 84 days") and the guardrail reads typed numbers, never `JsonDocument.Parse`-ing a message. Inputs are **metric-only** (kg/cm); the browser converts before POST so the tested core never sees a unit flag.
+
+```
+GET  /plan-app  → serves wwwroot/planner.html (the planner console)
+POST /plan      → drives one turn through HealthPlanSession.SubmitAsync(PlanEnvelope)
+```
+```jsonc
+// PlanEnvelope — { action, goal?, profile?, log? }. A create carries goal+profile; a log carries only
+// the day's numbers (the running plan is held server-side per conversationId — never resent).
+
+// POST /plan  create
+{ "action": "Create", "goal": "LoseFat",         // goal ∈ LoseFat | ImproveSleep | BoostEnergy
+  "profile": { "ageYears": 30, "sex": "Male", "weightKg": 90, "heightCm": 180,
+               "activityLevel": "Moderate",       // Sedentary | Light | Moderate | Active | VeryActive
+               "targetDays": 84, "goalWeightKg": 80 },   // goalWeightKg required only when goal == LoseFat
+  "flights": ["aggressive-plan"],                  // optional allow-listed overlays (move the deficit cap)
+  "breakPlanGenerator": false }                    // optional demo toggle → retry → degrade → safe fallback
+
+// POST /plan  log a day
+{ "action": "Log", "conversationId": "abc123",
+  "log": { "caloriesLogged": 2200, "tasksCompleted": 3 } }
+
+// POST /plan  response
+{ "conversationId": "abc123",
+  "reply": "Plan ready — a safe ~20% deficit; cap-bound to 133 days.",
+  "plan": {                                        // null when the guardrail short-circuits
+    "goal": "LoseFat", "dailyCalorieTarget": 2331, "dailyProteinTargetGrams": 144, "timelineDays": 133,
+    "summary": "…", "tasks": [ { "category": "Nutrition", "description": "…" } ],
+    "progress": [ { "day": 1, "caloriesLogged": 2200, "status": "Under", "tasksCompleted": 3,
+                    "tasksTotal": 4, "note": "Under target — good, just don't undereat. 3/4 tasks done." } ],
+    "degraded": false, "disclaimer": "Educational only — not medical advice." },
+  "trace": { "name": "plan.turn", "durationMs": 2.6, "degraded": false, "children": [ … ] } }
+```
+- **One shared serializer** (`PlanJson.Options` — `JsonSerializerDefaults.Web` + `JsonStringEnumConverter`) is used for both the host↔envelope boundary and `HealthPlanResult.ToJson`/`FromJson`, so enums are camelCase strings and the shape is identical everywhere.
+- **Session-scoped holder:** both runtime extension points (`IGuardrail`, `ILlmClient`) only receive a `WorkContext`. Rather than a second runtime change, `HealthPlanSession` owns a tiny mutable `TurnInputHolder { Current; PriorArtifact }` that the guardrail and planner close over; the session sets it immediately before `RunTurnAsync`. The runtime and `WorkContext` stay domain-pure.
+- **Living artifact, in-memory:** the running `HealthPlanResult` (plan + accumulating `ProgressEntry` list) lives in the session and is threaded forward each turn; a *degraded* turn never overwrites a good plan. Lost on host restart — same simplification as the triage session store.
+- **Safety invariant:** `UnsafeGoalGuardrail` is registered **unconditionally** (no flight disables it). It escalates iff `goal == LoseFat` and the profile is already-underweight, aims-underweight, or implies a sub-1200-kcal crash intake — all computed pre-tools via the shared `PlanMath`. A `Log` turn carries no goal/profile, so the guardrail naturally no-ops on it.
+
 ### Browser UI — `wwwroot/index.html`
 A single self-contained page (vanilla HTML/CSS/JS, **no npm/build step** — important: the repo stays "clone & `dotnet run`"). Two panes:
 - **Chat pane:** message history, an input box, the final triage card (urgency badge color-coded by level, recommended action, care-navigation, always-visible disclaimer).

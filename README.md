@@ -3,23 +3,26 @@
 [![CI](https://github.com/Christina7/mini-health-agent-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/Christina7/mini-health-agent-runtime/actions/workflows/ci.yml)
 
 A small, **runnable agent runtime** in C# / .NET 8 — a domain-agnostic orchestration core
-(`AgentRuntime`) with a health **symptom-triage & care-navigation** agent (`CareTriageAgent`) built
-on top. It reproduces, in miniature, the architecture of a production agent platform: a reason →
-act → observe loop, config-driven execution with JSON-Patch flights, a failure / degradation
+(`AgentRuntime`) hosting **two very different health agents**: a *reactive* **symptom-triage &
+care-navigation** agent (`CareTriageAgent`) and a *multi-step* **health-planning** agent
+(`HealthPlanAgent`). One engine, two domains, neither aware of the other — that is the proof the core
+is domain-agnostic. It reproduces, in miniature, the architecture of a production agent platform: a
+reason → act → observe loop, config-driven execution with JSON-Patch flights, a failure / degradation
 framework, a work-context store, safety guardrails, and OpenTelemetry tracing.
 
 > ⚠️ **Educational only — not medical advice.** This is a teaching/example project. The triage
-> agent is a navigation aid with a hard-coded emergency-escalation guardrail; it is not a diagnostic
-> system. Do not use it for real medical decisions.
+> agent is a navigation aid with a hard-coded emergency-escalation guardrail; the planner produces
+> illustrative calorie/task targets behind an always-on unsafe-goal guardrail. Neither is a
+> diagnostic or clinical tool — do not use them for real medical or dietary decisions.
 
 The default path is **fully offline and deterministic**: `dotnet run` works with **zero API keys**,
 no network, and no database — all data is synthetic JSON in the repo.
 
 ---
 
-## What it does
+## The first agent — symptom triage (reactive)
 
-Type symptoms; the agent runs a multi-step triage turn and returns an **urgency level**
+Type symptoms; the agent runs a triage turn and returns an **urgency level**
 (`SelfCare` / `SeeGp` / `UrgentCare` / `Emergency`), a recommended action, the tools it used, a
 not-medical-advice disclaimer — and a **trace tree** of the turn.
 
@@ -51,11 +54,83 @@ Three behaviours fall out of the architecture, all demonstrable live:
 
 ---
 
+## The second agent — health planning (multi-step)
+
+Triage "feels like a chatbot" for concrete reasons, not architectural ones: it has **one tool**, takes
+**one step**, and the shape is *message → reply card*. The runtime is already agentic — so the second
+agent is built to **exhibit what a chatbot can't**: you *declare a goal* (lose fat / improve sleep /
+boost energy) plus a simple profile, and the agent does **multi-step, multi-tool work** that produces
+a **living artifact** — a plan card, a daily task checklist, and progress that accumulates across turns.
+
+It runs on the **same runtime** as triage and shares nothing with it but `AgentRuntime`. Two distinct
+multi-tool chains become visible in the trace:
+
+- **Create a plan** → `profile_analyzer → plan_generator → task_decomposer → finish`. `profile_analyzer`
+  computes BMR (Mifflin–St Jeor) / TDEE / BMI; `plan_generator` **reads those observations** (a real
+  upstream dependency the trace shows — it doesn't recompute) and applies a goal + deficit-cap policy;
+  `task_decomposer` turns the targets into a checklist.
+- **Log a day** → `nutrition_calculator → progress_evaluator → finish`. The day's calories vs. target →
+  under / on / over, then a short human annotation appended to the artifact's progress list.
+
+```
+┌ Plan ───────────────────────────┐  ┌ Trace — create turn ─────────────────┐
+│  LOSE FAT                        │  │ ▾ plan.turn                2.6 ms ▕██▏ │
+│  2331 kcal/day · 144 g · 133 d   │  │   ▾ guardrail              0.1 ms ▕▏  │
+│  A safe ~20% deficit; cap-bound  │  │   ▾ agent.step             1.0 ms ▕█▏ │
+│  ☐ Nutrition  hit protein target │  │     ▾ tool:profile_analyzer 0.4 ms ▕▌│
+│  ☐ Movement   8k steps           │  │   ▾ agent.step             0.7 ms ▕▋▏│
+│  ☐ Sleep      7–8 h              │  │     ▾ tool:plan_generator  0.3 ms ▕▍│
+│  Educational only — not advice.  │  │   ▾ agent.step  …  tool:task_decomposer│
+└──────────────────────────────────┘  └──────────────────────────────────────┘
+```
+
+The same agentic properties as triage fall out of the architecture, made visible in the planner console:
+
+- **Safety by construction** — an always-on `UnsafeGoalGuardrail` (no flight can disable it) short-circuits
+  a `LoseFat` goal that is already underweight, *aims* at underweight, or implies a crash-diet intake
+  (< 1200 kcal), returning a professional-referral message with **no plan**. Request 80 kg in 28 days or
+  84 days and you get the **same safe plan** — the deficit cap binds, so the timeline stretches rather
+  than the intake dropping.
+- **Config-driven intensity** — `aggressive-plan` / `conservative-plan` flights move the deficit *cap*
+  (≈ 25 % vs. 15 % of TDEE), so the same goal yields a different calorie target with **no recompile**.
+- **Graceful degradation** — the "Break plan generator" toggle makes a tool throw; the turn still returns
+  a conservative, clearly-`⚠ degraded` plan instead of crashing, and the failed tool is flagged in the trace.
+
+The agent is driven by a **typed envelope**, not a chat string — the host deserializes the HTTP body into
+a `PlanEnvelope` and hands it to the session out-of-band (so `WorkContext.History` never fills with JSON):
+
+```jsonc
+// POST /plan — create
+{ "action": "Create", "goal": "LoseFat",
+  "profile": { "ageYears": 30, "sex": "Male", "weightKg": 90, "heightCm": 180,
+               "activityLevel": "Moderate", "targetDays": 84, "goalWeightKg": 80 } }
+
+// POST /plan — log a day (the prior plan is held server-side per conversationId; not resent)
+{ "action": "Log", "conversationId": "…", "log": { "caloriesLogged": 2200, "tasksCompleted": 3 } }
+```
+
+> Inputs are **metric-only** (kg/cm) — the browser form converts before POST, so the tested core never
+> sees a unit flag. The running plan lives in the session, in-memory, lost on restart (same as triage's
+> session store). The `/plan` contract and `PlanEnvelope` schema are documented in [DESIGN.md](DESIGN.md).
+
+_Open `/plan-app` in the running web app to drive it: set a goal, watch the create-chain trace, log a
+day, toggle the flights and the degrade switch._
+
+---
+
 ## Architecture
 
-`AgentRuntime` is **domain-agnostic** — it has zero health knowledge and could host any agent. All
-health specifics live in `CareTriageAgent`. Two thin hosts — a console CLI and an ASP.NET Core web
-app — reuse the exact same composition root (`CareTriageSession`); neither contains agent logic.
+`AgentRuntime` is **domain-agnostic** — zero health knowledge, and it could host any agent. The proof
+is that it hosts **two**: `CareTriageAgent` and `HealthPlanAgent` are **siblings** that each reference
+`AgentRuntime` only, never each other. Each has its own composition root
+(`CareTriageSession` / `HealthPlanSession`) wiring the same engine to a different domain. Thin hosts
+contain no agent logic — the web app (`HealthAgents.Web`) serves both (`POST /triage`, `POST /plan`),
+and a console CLI drives triage.
+
+The only net-new **runtime** code the second agent required is **one line**: the orchestrator's root
+span name became a constructor argument (`"triage.turn"` vs `"plan.turn"`). Everything else — the loop,
+the trace renderer, the session store, flight loading, the degrade mapping, the `ToJson`/`FromJson`
+pattern — is reused as-is. That reuse *is* the domain-agnostic claim, demonstrated rather than asserted.
 
 ![Architecture: two thin hosts converge on one composition root, built on a domain-agnostic core holding the seven runtime concerns](docs/diagrams/architecture.png)
 
@@ -102,7 +177,17 @@ Built test-first in vertical slices; each left the repo green and runnable. (Eac
 | 14 | Browser UI | Color-coded triage card + collapsible trace tree + demo toolbar (no build step). Plus a per-turn state-reset fix surfaced by multi-turn use | `wwwroot/index.html`, `WorkContext.BeginTurn` |
 | 15 | CI | GitHub Actions build + test on every push/PR, green badge | `.github/workflows/ci.yml` |
 
-**43 unit + integration tests** pin every behaviour (xUnit + Moq + `WebApplicationFactory`).
+**Milestone 3 — a second agent** (multi-step health planning on the *same* runtime):
+
+| # | Slice | Contribution | Key types |
+|---|-------|--------------|-----------|
+| 16 | Second-agent skeleton | New `HealthPlanAgent` library (domain types + `HealthPlanResult` round-trip) and the **one** runtime change: a parameterized root span name | `HealthPlanResult`, `PlanMath`, `rootSpanName` |
+| 17 | Create chain | `profile_analyzer → plan_generator → task_decomposer`; `plan_generator` **consumes the analyzer's TDEE** from observations; deficit-*cap* policy | `MockHealthPlanner`, `PlanPolicy`, `TurnInputHolder` |
+| 18 | Log chain + living artifact | `nutrition_calculator → progress_evaluator`; typed `PlanEnvelope`; progress accumulates across turns | `PlanEnvelope`, `ProgressEntry`, `DayStatus` |
+| 19 | Composition root + safety | `HealthPlanSession` owns the holder and threads the artifact; `UnsafeGoalGuardrail` wired **unconditionally** | `HealthPlanSession`, `UnsafeGoalGuardrail`, `HealthPlanConfig` |
+| 20 | Web + flights + console | `POST /plan` + `PlanSessionStore`; aggressive / conservative flights; planner console at `/plan-app` + degrade demo | `HealthAgents.Web`, `wwwroot/planner.html` |
+
+**74 unit + integration tests** pin every behaviour (xUnit + Moq + `WebApplicationFactory`).
 
 ---
 
@@ -119,7 +204,8 @@ self-contained, navigable piece of the codebase:
 | Work context store | `AgentRuntime/Context/WorkContext.cs` | Cross-turn state / memory (per-conversation `History`, per-turn reset) |
 | Tool selection & invocation | `AgentRuntime/Tools/` | Tool registry + invocation strategy |
 | Distributed tracing | `AgentRuntime/Observability/` | OpenTelemetry spans: agent steps, tool chains, latency breakdown |
-| Safety invariant | `CareTriageAgent/Guardrails/RedFlagGuardrail.cs` + `CareTriageSession.cs` | A guardrail config/flights cannot override |
+| Safety invariant | `CareTriageAgent/Guardrails/RedFlagGuardrail.cs` · `HealthPlanAgent/Guardrails/UnsafeGoalGuardrail.cs` | An always-on guardrail per agent that config/flights cannot override |
+| Two agents, one runtime | `CareTriageAgent/` · `HealthPlanAgent/` (siblings on `AgentRuntime`) | The same engine drives a reactive one-tool agent and a multi-step, multi-tool one |
 
 ---
 
@@ -135,6 +221,10 @@ self-contained, navigable piece of the codebase:
 **Output** — the agent reply, a structured `TriageResult` (`urgency`, `recommendedAction`,
 `toolsInvoked`, `degraded`, `disclaimer`), and the turn's trace tree.
 
+The **health planner** is web-only (`POST /plan`); its typed `PlanEnvelope`, intensity flights
+(`aggressive-plan` / `conservative-plan`), and `breakPlanGenerator` degrade toggle are described under
+[The second agent](#the-second-agent--health-planning-multi-step) above and in [DESIGN.md](DESIGN.md).
+
 ---
 
 ## Quick start
@@ -143,9 +233,10 @@ self-contained, navigable piece of the codebase:
 
 ```bash
 dotnet build MiniHealthAgentRuntime.sln
-dotnet test                                                                 # 43 passing
+dotnet test                                                                 # 74 passing
 
-# The web app — opens a guided walkthrough at /, the live chat app at /app (offline, no keys)
+# The web app serves both agents (offline, no keys):
+#   /  guided walkthrough   ·   /app  triage chat   ·   /plan-app  health planner
 dotnet run --project src/HealthAgents.Web                                # then open the printed http://localhost:5xxx
 #   press Ctrl+C in this terminal to stop the server
 
