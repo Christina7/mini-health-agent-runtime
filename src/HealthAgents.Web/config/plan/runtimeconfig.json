@@ -1,0 +1,13 @@
+{
+  "agent": { "maxSteps": 6, "llmProvider": "mock" },
+  "tools": {
+    "profile_analyzer": { "enabled": true },
+    "plan_generator": { "enabled": true },
+    "task_decomposer": { "enabled": true },
+    "nutrition_calculator": { "enabled": true },
+    "progress_evaluator": { "enabled": true }
+  },
+  "plan": { "deficitCapFraction": 0.20, "proteinGramsPerKg": 1.8, "calorieFloor": 1200 },
+  "resilience": { "toolMaxRetries": 2 },
+  "anthropic": { "model": "claude-opus-4-8" }
+}
