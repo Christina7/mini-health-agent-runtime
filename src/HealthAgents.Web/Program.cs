@@ -43,9 +43,15 @@ var configProvider = new RuntimeConfigProvider(baseJson, flights);
 var sessions = new TriageSessionStore();
 
 // Plan agent: its own config subfolder and session store, driving the SAME runtime as triage — the
-// proof that one engine hosts two very different agents. No plan flights ship yet (a later slice).
+// proof that one engine hosts two very different agents. Flights (aggressive/conservative) are
+// allow-listed from config/plan/flights, exactly like triage's.
 var planConfigDir = Path.Combine(app.Environment.ContentRootPath, "config", "plan");
-var planConfigProvider = new RuntimeConfigProvider(File.ReadAllText(Path.Combine(planConfigDir, "runtimeconfig.json")));
+var planFlightsDir = Path.Combine(planConfigDir, "flights");
+var planFlights = Directory.Exists(planFlightsDir)
+    ? Directory.GetFiles(planFlightsDir, "*.json").ToDictionary(f => Path.GetFileNameWithoutExtension(f)!, File.ReadAllText)
+    : new Dictionary<string, string>();
+var planConfigProvider = new RuntimeConfigProvider(
+    File.ReadAllText(Path.Combine(planConfigDir, "runtimeconfig.json")), planFlights);
 var planSessions = new PlanSessionStore();
 
 HealthPlanSession BuildPlanSession(string conversationId, string[]? activeFlights) =>
