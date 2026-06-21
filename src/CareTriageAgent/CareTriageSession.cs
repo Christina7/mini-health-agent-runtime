@@ -37,7 +37,7 @@ public sealed class CareTriageSession
             config.Triage.SelfCareMaxScore, config.Triage.SeeGpMaxScore, config.Triage.UrgentCareMaxScore));
         var scope = new ExecutionScope(config.Resilience.ToolMaxRetries);
 
-        _orchestrator = new AgentOrchestrator(new MockTriagePlanner(policy), registry, guardrails, scope);
+        _orchestrator = new AgentOrchestrator(new MockTriagePlanner(policy), registry, guardrails, scope, rootSpanName: "triage.turn");
         _context = new WorkContext(conversationId);
     }
 
