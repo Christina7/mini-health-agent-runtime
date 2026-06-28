@@ -122,4 +122,28 @@ public class AgentOrchestratorTests
         Assert.True(result.Degraded);
         Assert.Equal(3, failing.CallCount); // first attempt + two retries
     }
+
+    [Fact]
+    public async Task Unknown_tool_decision_degrades_instead_of_throwing()
+    {
+        var planner = new Mock<ILlmClient>();
+        planner
+            .Setup(p => p.PlanNextStepAsync(
+                It.IsAny<WorkContext>(),
+                It.IsAny<IReadOnlyList<ToolDescriptor>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PlanDecision.CallTool("missing_tool", default));
+
+        var orchestrator = new AgentOrchestrator(planner.Object, EmptyRegistry());
+        var ctx = new WorkContext("conv-1");
+
+        var result = await orchestrator.RunTurnAsync(ctx, "please use a missing tool", CancellationToken.None);
+
+        Assert.True(result.Degraded);
+        Assert.Contains("consult a professional", result.Message, StringComparison.OrdinalIgnoreCase);
+        var observation = Assert.Single(ctx.Observations);
+        Assert.Equal("missing_tool", observation.ToolName);
+        Assert.False(observation.Result.Success);
+        Assert.Equal("unknown tool", observation.Result.Error);
+    }
 }
