@@ -1,5 +1,6 @@
 using CareTriageAgent.Guardrails;
 using CareTriageAgent.Tools;
+using CareTriageAgent.Triage;
 
 namespace CareTriageAgent;
 
@@ -7,41 +8,22 @@ namespace CareTriageAgent;
 /// The single source of the health domain data — the symptom knowledge base and the red-flag rules.
 /// Both hosts (CLI and Web) build their <see cref="CareTriageSession"/> from these factories so the
 /// two surfaces stay in lock-step instead of each carrying its own copy of the data.
+///
+/// The data itself lives in a versioned JSON taxonomy (<c>triage-taxonomy.json</c>) loaded once via
+/// <see cref="SymptomTaxonomy"/>; these factories just expose its scoring and safety views. Phrase
+/// sets there are shared by reference, so the KB's chest entry and the cardiac red-flag rule are the
+/// same list and cannot drift apart — exactly how "chest pressure" alone fell to SelfCare (issue #36).
 /// </summary>
 public static class CareTriageDomain
 {
-    /// <summary>
-    /// The chest phrases that count as a cardiac presentation. Single source of truth shared by the
-    /// symptom KB's chest entry (the scoring layer) and the cardiac red-flag rule (the safety layer),
-    /// so the two cannot drift apart — e.g. a phrase the guardrail knows but the KB scores 0, which
-    /// is exactly how "chest pressure" alone fell through to SelfCare (issue #36).
-    /// </summary>
-    public static readonly IReadOnlyList<string> CardiacChestPhrases =
-        new[] { "chest pain", "chest pressure", "chest tightness" };
+    private static readonly SymptomTaxonomy Taxonomy = SymptomTaxonomy.Load();
+
+    /// <summary>The version stamp of the loaded taxonomy (recorded in audit records in a later slice).</summary>
+    public static string TaxonomyVersion => Taxonomy.Version;
 
     /// <summary>The synthetic symptom knowledge base scored by <see cref="SymptomKnowledgeBaseTool"/>.</summary>
-    public static IReadOnlyList<SymptomEntry> DefaultKnowledgeBase() => new[]
-    {
-        new SymptomEntry("sore_throat", new[] { "sore throat", "throat pain" }, BaseSeverity: 1, SelfCareAdvice: "Rest, fluids, and throat lozenges usually help."),
-        new SymptomEntry("fever", new[] { "fever", "high temperature" }, BaseSeverity: 1, SelfCareAdvice: "Stay hydrated and monitor your temperature."),
-        new SymptomEntry("headache", new[] { "headache" }, BaseSeverity: 1, SelfCareAdvice: "Rest and over-the-counter pain relief may help."),
-        new SymptomEntry("cough", new[] { "cough" }, BaseSeverity: 1, SelfCareAdvice: "A cough often clears on its own within a couple of weeks."),
-        new SymptomEntry("dizziness", new[] { "dizzy", "dizziness", "lightheaded" }, BaseSeverity: 3, SelfCareAdvice: "Sit or lie down; avoid sudden movements."),
-        new SymptomEntry("abdominal_pain", new[] { "abdominal pain", "stomach pain", "belly pain" }, BaseSeverity: 4, SelfCareAdvice: "Note where the pain is and whether it worsens."),
-        new SymptomEntry("chest_pain", CardiacChestPhrases, BaseSeverity: 7, SelfCareAdvice: "Chest pain should be assessed promptly."),
-        new SymptomEntry("breathing_difficulty", new[] { "shortness of breath", "trouble breathing", "can't breathe" }, BaseSeverity: 8, SelfCareAdvice: "Difficulty breathing needs prompt assessment."),
-    };
+    public static IReadOnlyList<SymptomEntry> DefaultKnowledgeBase() => Taxonomy.KnowledgeBase;
 
     /// <summary>The red-flag rules the always-on guardrail escalates on (never config-disableable).</summary>
-    public static IReadOnlyList<RedFlagRule> DefaultRedFlagRules() => new[]
-    {
-        new RedFlagRule(
-            Id: "cardiac",
-            AllOfAny: new IReadOnlyList<string>[]
-            {
-                CardiacChestPhrases,
-                new[] { "shortness of breath", "short of breath", "trouble breathing", "difficulty breathing" },
-            },
-            Message: "🚨 Possible cardiac emergency — call your local emergency number / go to the ER now."),
-    };
+    public static IReadOnlyList<RedFlagRule> DefaultRedFlagRules() => Taxonomy.RedFlagRules;
 }

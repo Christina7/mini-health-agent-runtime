@@ -1,0 +1,24 @@
+{
+  "taxonomyVersion": "2026-06-28.1",
+  "phraseSets": {
+    "cardiac_chest": ["chest pain", "chest pressure", "chest tightness"],
+    "cardiac_breathing": ["shortness of breath", "short of breath", "trouble breathing", "difficulty breathing"]
+  },
+  "symptoms": [
+    { "id": "sore_throat", "keywords": ["sore throat", "throat pain"], "baseSeverity": 1, "selfCareAdvice": "Rest, fluids, and throat lozenges usually help." },
+    { "id": "fever", "keywords": ["fever", "high temperature"], "baseSeverity": 1, "selfCareAdvice": "Stay hydrated and monitor your temperature." },
+    { "id": "headache", "keywords": ["headache"], "baseSeverity": 1, "selfCareAdvice": "Rest and over-the-counter pain relief may help." },
+    { "id": "cough", "keywords": ["cough"], "baseSeverity": 1, "selfCareAdvice": "A cough often clears on its own within a couple of weeks." },
+    { "id": "dizziness", "keywords": ["dizzy", "dizziness", "lightheaded"], "baseSeverity": 3, "selfCareAdvice": "Sit or lie down; avoid sudden movements." },
+    { "id": "abdominal_pain", "keywords": ["abdominal pain", "stomach pain", "belly pain"], "baseSeverity": 4, "selfCareAdvice": "Note where the pain is and whether it worsens." },
+    { "id": "chest_pain", "keywordsRef": "cardiac_chest", "baseSeverity": 7, "selfCareAdvice": "Chest pain should be assessed promptly." },
+    { "id": "breathing_difficulty", "keywords": ["shortness of breath", "trouble breathing", "can't breathe"], "baseSeverity": 8, "selfCareAdvice": "Difficulty breathing needs prompt assessment." }
+  ],
+  "redFlags": [
+    {
+      "id": "cardiac",
+      "allOfAny": ["cardiac_chest", "cardiac_breathing"],
+      "message": "🚨 Possible cardiac emergency — call your local emergency number / go to the ER now."
+    }
+  ]
+}
