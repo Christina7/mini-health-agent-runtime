@@ -10,6 +10,15 @@ namespace CareTriageAgent;
 /// </summary>
 public static class CareTriageDomain
 {
+    /// <summary>
+    /// The chest phrases that count as a cardiac presentation. Single source of truth shared by the
+    /// symptom KB's chest entry (the scoring layer) and the cardiac red-flag rule (the safety layer),
+    /// so the two cannot drift apart — e.g. a phrase the guardrail knows but the KB scores 0, which
+    /// is exactly how "chest pressure" alone fell through to SelfCare (issue #36).
+    /// </summary>
+    public static readonly IReadOnlyList<string> CardiacChestPhrases =
+        new[] { "chest pain", "chest pressure", "chest tightness" };
+
     /// <summary>The synthetic symptom knowledge base scored by <see cref="SymptomKnowledgeBaseTool"/>.</summary>
     public static IReadOnlyList<SymptomEntry> DefaultKnowledgeBase() => new[]
     {
@@ -19,7 +28,7 @@ public static class CareTriageDomain
         new SymptomEntry("cough", new[] { "cough" }, BaseSeverity: 1, SelfCareAdvice: "A cough often clears on its own within a couple of weeks."),
         new SymptomEntry("dizziness", new[] { "dizzy", "dizziness", "lightheaded" }, BaseSeverity: 3, SelfCareAdvice: "Sit or lie down; avoid sudden movements."),
         new SymptomEntry("abdominal_pain", new[] { "abdominal pain", "stomach pain", "belly pain" }, BaseSeverity: 4, SelfCareAdvice: "Note where the pain is and whether it worsens."),
-        new SymptomEntry("chest_pain", new[] { "chest pain", "chest tightness" }, BaseSeverity: 7, SelfCareAdvice: "Chest pain should be assessed promptly."),
+        new SymptomEntry("chest_pain", CardiacChestPhrases, BaseSeverity: 7, SelfCareAdvice: "Chest pain should be assessed promptly."),
         new SymptomEntry("breathing_difficulty", new[] { "shortness of breath", "trouble breathing", "can't breathe" }, BaseSeverity: 8, SelfCareAdvice: "Difficulty breathing needs prompt assessment."),
     };
 
@@ -28,7 +37,11 @@ public static class CareTriageDomain
     {
         new RedFlagRule(
             Id: "cardiac",
-            AllOf: new[] { "chest pain", "shortness of breath" },
+            AllOfAny: new IReadOnlyList<string>[]
+            {
+                CardiacChestPhrases,
+                new[] { "shortness of breath", "short of breath", "trouble breathing", "difficulty breathing" },
+            },
             Message: "🚨 Possible cardiac emergency — call your local emergency number / go to the ER now."),
     };
 }

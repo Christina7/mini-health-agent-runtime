@@ -9,7 +9,11 @@ public class RedFlagGuardrailTests
     {
         new RedFlagRule(
             Id: "cardiac",
-            AllOf: new[] { "chest pain", "shortness of breath" },
+            AllOfAny: new[]
+            {
+                new[] { "chest pain", "chest pressure", "chest tightness" },
+                new[] { "shortness of breath", "short of breath", "trouble breathing", "difficulty breathing" },
+            },
             Message: "Possible cardiac emergency — call your local emergency number now.")
     });
 
@@ -33,6 +37,34 @@ public class RedFlagGuardrailTests
     {
         var ctx = new WorkContext("conv-1");
         ctx.AppendUser("I have a sore throat and a mild fever");
+
+        var verdict = await CardiacGuardrail().EvaluateAsync(ctx, CancellationToken.None);
+
+        Assert.False(verdict.ShortCircuit);
+    }
+
+    [Theory]
+    [InlineData("I feel chest pressure and I am short of breath")]
+    [InlineData("Chest tightness, plus trouble breathing")]
+    [InlineData("chest-pressure with difficulty breathing")]
+    public async Task Cardiac_synonym_combo_escalates(string message)
+    {
+        var ctx = new WorkContext("conv-1");
+        ctx.AppendUser(message);
+
+        var verdict = await CardiacGuardrail().EvaluateAsync(ctx, CancellationToken.None);
+
+        Assert.True(verdict.ShortCircuit);
+        Assert.Contains("cardiac", verdict.Message!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("I have chest pressure but breathing is normal")]
+    [InlineData("I am short of breath after running but no chest symptoms")]
+    public async Task One_cardiac_group_alone_passes_through(string message)
+    {
+        var ctx = new WorkContext("conv-1");
+        ctx.AppendUser(message);
 
         var verdict = await CardiacGuardrail().EvaluateAsync(ctx, CancellationToken.None);
 
