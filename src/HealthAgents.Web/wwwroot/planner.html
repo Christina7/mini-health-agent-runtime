@@ -371,6 +371,36 @@
       finally { traceDot.classList.remove('live'); }
     }
 
+    // Derived "summary, then detail" strip over the logged days. Pure projection of data the client
+    // already has — no backend, no contract. Hidden until at least one day is logged. Reuses the same
+    // ±100 kcal tolerance as nutrition_calculator so the avg delta agrees with the per-day badges.
+    const TOLERANCE_KCAL = 100;
+    function progressSummary(plan) {
+      const days = plan.progress || [];
+      if (days.length === 0) return '';
+
+      const n = days.length;
+      const timeline = plan.timelineDays || 0;
+      const daysLogged = timeline > 0 ? `${n} / ${timeline}` : `${n}`;
+
+      const avg = Math.round(days.reduce((s, p) => s + p.caloriesLogged, 0) / n);
+      const delta = (plan.dailyCalorieTarget || 0) - avg;
+      let deltaCls = 'on', deltaText = 'on target';
+      if (delta > TOLERANCE_KCAL) { deltaCls = 'under'; deltaText = `${delta} under target`; }
+      else if (delta < -TOLERANCE_KCAL) { deltaCls = 'over'; deltaText = `${-delta} over target`; }
+
+      const sumDone = days.reduce((s, p) => s + p.tasksCompleted, 0);
+      const sumTotal = days.reduce((s, p) => s + p.tasksTotal, 0);
+      const pct = sumTotal > 0 ? `${Math.round((sumDone / sumTotal) * 100)}%` : '—';
+
+      return `
+        <div class="metrics" style="margin-bottom:var(--s4)">
+          <div class="metric"><div class="num">${daysLogged}</div><div class="lab">days logged</div></div>
+          <div class="metric"><div class="num">${avg}</div><div class="lab">avg intake · kcal</div><div class="lab" style="margin-top:2px;color:var(--${deltaCls}-fg)">${deltaText}</div></div>
+          <div class="metric"><div class="num">${pct}</div><div class="lab">${sumDone} / ${sumTotal} tasks done</div></div>
+        </div>`;
+    }
+
     function render(data) {
       const plan = data.plan;
       updateMeta();
@@ -406,6 +436,7 @@
         </div>
         <div class="panel">
           <h2>Progress</h2>
+          ${progressSummary(plan)}
           <ul class="progress-list">${progress || '<li class="empty">No days logged yet — log your first day above.</li>'}</ul>
         </div>`;
       $('logBtn').addEventListener('click', logDay);
