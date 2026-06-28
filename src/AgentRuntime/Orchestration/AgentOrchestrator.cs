@@ -98,7 +98,17 @@ public sealed class AgentOrchestrator
                 case PlanDecision.CallTool call:
                     if (!_tools.TryGet(call.ToolName, out var tool))
                     {
-                        throw new InvalidOperationException($"Unknown tool: {call.ToolName}");
+                        ctx.Degraded = true;
+                        ctx.RecordObservation(
+                            call.ToolName,
+                            new ToolResult(Success: false, Output: default, Error: "unknown tool"));
+
+                        stepActivity?.SetTag("degraded", true);
+                        stepActivity?.SetTag("unknownTool", call.ToolName);
+
+                        var unknownToolFallback = "I wasn't able to complete this safely; please consult a professional.";
+                        ctx.AppendAgent(unknownToolFallback);
+                        return new TurnResult(unknownToolFallback, Degraded: true);
                     }
 
                     using (var toolActivity = RuntimeActivitySource.Source.StartActivity($"tool:{call.ToolName}"))
