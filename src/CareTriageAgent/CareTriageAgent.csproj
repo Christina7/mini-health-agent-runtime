@@ -4,6 +4,10 @@
     <ProjectReference Include="..\AgentRuntime\AgentRuntime.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Triage\triage-taxonomy.json" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

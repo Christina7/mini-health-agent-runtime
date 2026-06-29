@@ -40,6 +40,30 @@ public class TriageEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.True(trace.GetProperty("children").GetArrayLength() > 0, "the turn should emit at least one child span");
     }
 
+    // Issue #36 pinned at the runtime layer: "chest pressure" alone (a cardiac chest phrase that was
+    // once unknown to the KB and fell to SelfCare) must triage UrgentCare over real HTTP, through the
+    // served host wiring — not just in a KB unit test. This is the load-bearing proof that the fix is
+    // on the path the host actually runs, which is exactly the gap a unit test cannot close.
+    [Fact]
+    public async Task Chest_pressure_alone_triages_urgent_care_over_http()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/triage", new
+        {
+            message = "I have chest pressure right now",
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        var triage = body.GetProperty("triage");
+        Assert.Equal("UrgentCare", triage.GetProperty("urgency").GetString());
+        Assert.Contains(
+            "symptom_kb",
+            triage.GetProperty("toolsInvoked").EnumerateArray().Select(e => e.GetString()));
+    }
+
     // A high-severity (but non-red-flag) input runs the full plan -> act -> observe loop: the planner
     // calls symptom_kb and finishes with a structured TriageResult whose urgency is Emergency.
     [Fact]

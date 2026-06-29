@@ -152,6 +152,26 @@ The red-flag guardrail is unaffected by either toggle (registered outside config
   degrading, and the disabled-tool matrix.
 - **Live-API tests are opt-in** via an env var and skipped in CI. No network in the default suite.
 
+### 6.1 Runtime verification per slice (settled convention)
+
+A slice is **not done at green unit tests.** After the UT cycle, every slice verifies through the
+running server in two layers, both required before its PR is opened:
+
+1. **Automated in-process runtime test (CI).** Add or extend a `WebApplicationFactory<Program>`-based
+   endpoint test in `HealthAgents.Web.Tests` (e.g. `TriageEndpointTests`). It boots the real host
+   in-memory — real DI, host wiring, domain, endpoints — and asserts on a real HTTP `POST /triage`
+   response. This proves the change is on the **served** path, not just a unit under test.
+   Deterministic, offline, runs in CI. (Slice A's instance: `Chest_pressure_alone_triages_urgent_care_over_http`.)
+2. **Manual out-of-process smoke (done-check).** Before opening the PR, boot the host for real
+   (`ASPNETCORE_URLS=http://localhost:PORT dotnet run --project src/HealthAgents.Web`), POST the
+   slice's representative inputs, eyeball the reply. This is the only layer that exercises Kestrel,
+   port binding, the published build, env/config, and that the fix is on the branch/build actually
+   running (the #36 gap). Stop any stale host first (`Get-Process -Name HealthAgents.Web,dotnet |
+   Stop-Process -Force`).
+
+Unit tests prove the logic; layer 1 proves the wiring; layer 2 proves the running binary. The repo
+already had layer 1, so this costs little and closes the exact gap behind #36.
+
 ## 7. Red-flag negation: intentional fail-safe (resolves review Medium-4)
 
 `RedFlagGuardrail` keeps **conservative substring matching on raw text** (`RedFlagGuardrail.cs:40`).
@@ -209,15 +229,28 @@ AND/OR semantics, or guardrail primacy · reconciling DESIGN.md (separate follow
 
 ## 12. Proposed TDD slices (one PR each, off `main`)
 
+Each slice follows the same loop: failing UT → green UT → **runtime verification per §6.1** (a
+`WebApplicationFactory` endpoint test in CI + a manual boot smoke) → open PR. The "runtime" line
+below names each slice's served-path assertion.
+
 - **A — Taxonomy to JSON.** Move symptoms + phraseSets + red-flag rules into versioned JSON; `symptom_kb`
   and red-flag rules build from it via `keywordsRef`/`allOfAny`. Pure refactor; #36 invariant test
   retained (now structural). No behavior change.
+  *Runtime:* `Chest_pressure_alone_triages_urgent_care_over_http`; boot smoke: chest pressure → UrgentCare,
+  cardiac red flag short-circuits, sore throat → SelfCare. **(done)**
 - **B — Extractor seam (mock only).** Add `ISymptomExtractor` + `KeywordSymptomExtractor` +
   `symptom_extractor` tool; refactor `symptom_kb` to a pure `presentIds` scorer; planner does
   extractor→kb two-step passing IDs as args; disabled-tool matrix. Deterministic, green. No LLM.
+  *Runtime:* endpoint test asserts the two-step (`symptom_extractor` then `symptom_kb` in `toolsInvoked`);
+  disabled-`symptom_extractor` flight → safe `SeeGp` over HTTP (never SelfCare).
 - **C — Present/absent + negation.** Add present/absent to the keyword extractor, fix the scoring-path
   negation bug with fixtures; add the intentional-guardrail-false-positive test (§7).
+  *Runtime:* endpoint test for "no chest pain" → scoring drops it; "no chest pain but short of breath"
+  → red flag still escalates (intentional fail-safe).
 - **D — Anthropic extractor.** `AnthropicSymptomExtractor` behind `llmProvider=anthropic`: closed-set
   prompt injects the taxonomy, owns timeout, internal fallback (`fallback:true`, non-degraded);
   `ScriptedSymptomExtractor` unit tests; live-API tests opt-in via env.
+  *Runtime:* endpoint test with a forced-failure scripted extractor → `fallback:true`, non-degraded,
+  still triages correctly over HTTP.
 - **E — Audit log.** `IAuditSink` + `JsonlAuditSink`, config + concurrency + PII gate; record per §8.
+  *Runtime:* endpoint test with an in-memory `IAuditSink` asserts one record per turn with the §8 fields.
