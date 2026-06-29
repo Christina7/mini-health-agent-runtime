@@ -19,7 +19,11 @@ public class MockTriagePlannerTests
 
     private static AgentOrchestrator Orchestrator(out WorkContext ctx)
     {
-        var registry = new ToolRegistry(new ITool[] { new SymptomKnowledgeBaseTool(Kb) });
+        var registry = new ToolRegistry(new ITool[]
+        {
+            new SymptomExtractorTool(new KeywordSymptomExtractor(Kb)),
+            new SymptomKnowledgeBaseTool(Kb),
+        });
         var policy = new TriagePolicy(new TriageThresholds(SelfCareMaxScore: 2, SeeGpMaxScore: 5, UrgentCareMaxScore: 8));
         ctx = new WorkContext("conv-1");
         return new AgentOrchestrator(new MockTriagePlanner(policy), registry);
@@ -57,7 +61,11 @@ public class MockTriagePlannerTests
     [Fact]
     public async Task Failed_symptom_lookup_yields_a_safe_degraded_result()
     {
-        var registry = new ToolRegistry(new ITool[] { new ThrowingTool("symptom_kb") });
+        var registry = new ToolRegistry(new ITool[]
+        {
+            new SymptomExtractorTool(new KeywordSymptomExtractor(Kb)),
+            new ThrowingTool("symptom_kb"),
+        });
         var policy = new TriagePolicy(new TriageThresholds(SelfCareMaxScore: 2, SeeGpMaxScore: 5, UrgentCareMaxScore: 8));
         var scope = new ExecutionScope(maxRetries: 1);
         var orchestrator = new AgentOrchestrator(new MockTriagePlanner(policy), registry, guardrails: null, scope: scope);

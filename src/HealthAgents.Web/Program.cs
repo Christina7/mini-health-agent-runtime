@@ -64,11 +64,13 @@ HealthPlanSession BuildPlanSession(string conversationId, string[]? activeFlight
 CareTriageSession BuildSession(string conversationId, string[]? activeFlights, bool breakSymptomKb)
 {
     var config = configProvider.Resolve<CareTriageConfig>(activeFlights ?? Array.Empty<string>());
+    var kb = CareTriageDomain.DefaultKnowledgeBase();
     var tools = new ITool[]
     {
+        new SymptomExtractorTool(new KeywordSymptomExtractor(kb)),
         breakSymptomKb
             ? new BrokenSymptomTool()
-            : new SymptomKnowledgeBaseTool(CareTriageDomain.DefaultKnowledgeBase()),
+            : new SymptomKnowledgeBaseTool(kb),
     };
     return new CareTriageSession(config, tools, CareTriageDomain.DefaultRedFlagRules(), conversationId);
 }

@@ -59,9 +59,31 @@ public class TriageEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 
         var triage = body.GetProperty("triage");
         Assert.Equal("UrgentCare", triage.GetProperty("urgency").GetString());
-        Assert.Contains(
-            "symptom_kb",
-            triage.GetProperty("toolsInvoked").EnumerateArray().Select(e => e.GetString()));
+
+        // The two-step pipeline ran over HTTP: extractor first, then the scorer.
+        var tools = triage.GetProperty("toolsInvoked").EnumerateArray().Select(e => e.GetString()).ToList();
+        Assert.Equal(new[] { "symptom_extractor", "symptom_kb" }, tools);
+    }
+
+    // Disabled-tool matrix over HTTP: with the extractor switched off by a flight, the turn cannot be
+    // assessed, so it degrades to SeeGp — it must NOT silently score 0 and return SelfCare (#36).
+    [Fact]
+    public async Task Disabled_extractor_flight_degrades_to_see_gp_not_self_care()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/triage", new
+        {
+            message = "I have chest pressure right now",
+            flights = new[] { "disable-symptom-extractor" },
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        var triage = body.GetProperty("triage");
+        Assert.Equal("SeeGp", triage.GetProperty("urgency").GetString());
+        Assert.True(triage.GetProperty("degraded").GetBoolean());
     }
 
     // A high-severity (but non-red-flag) input runs the full plan -> act -> observe loop: the planner
