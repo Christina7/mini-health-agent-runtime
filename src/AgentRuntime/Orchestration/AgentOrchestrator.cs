@@ -92,10 +92,14 @@ public sealed class AgentOrchestrator
             switch (decision)
             {
                 case PlanDecision.Finish finish:
+                    // Label the finishing step with the planner's summary (e.g. the final urgency) so
+                    // the trace's last node says what was decided instead of being an empty span.
+                    stepActivity?.SetTag("summary", finish.Summary ?? "finish");
                     ctx.AppendAgent(finish.Message);
                     return new TurnResult(finish.Message, Degraded: ctx.Degraded, Result: finish.Result);
 
                 case PlanDecision.CallTool call:
+                    stepActivity?.SetTag("summary", $"call {call.ToolName}");
                     if (!_tools.TryGet(call.ToolName, out var tool))
                     {
                         ctx.Degraded = true;
@@ -103,6 +107,7 @@ public sealed class AgentOrchestrator
                             call.ToolName,
                             new ToolResult(Success: false, Output: default, Error: "unknown tool"));
 
+                        stepActivity?.SetTag("summary", $"unknown tool: {call.ToolName}");
                         stepActivity?.SetTag("degraded", true);
                         stepActivity?.SetTag("unknownTool", call.ToolName);
 
@@ -130,6 +135,13 @@ public sealed class AgentOrchestrator
 
                         var observation = scopeResult.Value
                             ?? new ToolResult(Success: false, Output: default, Error: "tool unavailable");
+
+                        // Surface the tool's own one-line summary (e.g. "score 7") in the trace.
+                        if (observation.Summary is { } toolSummary)
+                        {
+                            toolActivity?.SetTag("summary", toolSummary);
+                        }
+
                         ctx.RecordObservation(call.ToolName, observation);
                     }
 

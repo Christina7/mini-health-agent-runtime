@@ -17,6 +17,8 @@ public abstract record PlanDecision
     /// <summary>
     /// End the turn and reply with <paramref name="Message"/>. <paramref name="Result"/> is an
     /// optional structured payload (JSON) the app deserializes into its own result type.
+    /// <paramref name="Summary"/> is an optional one-line trace label for the finishing step
+    /// (e.g. the final urgency) — observability only, never user-facing.
     /// </summary>
-    public sealed record Finish(string Message, JsonElement? Result = null) : PlanDecision;
+    public sealed record Finish(string Message, JsonElement? Result = null, string? Summary = null) : PlanDecision;
 }

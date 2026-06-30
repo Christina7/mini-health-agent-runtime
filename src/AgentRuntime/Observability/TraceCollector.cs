@@ -49,7 +49,8 @@ public sealed class TraceCollector : IDisposable
             .ToList();
 
         var degraded = activity.GetTagItem("degraded") is true;
-        return new TraceNode(activity.OperationName, activity.Duration.TotalMilliseconds, degraded, children);
+        var label = activity.GetTagItem("summary") as string;
+        return new TraceNode(activity.OperationName, label, activity.Duration.TotalMilliseconds, degraded, children);
     }
 
     public void Dispose() => _listener.Dispose();

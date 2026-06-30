@@ -86,7 +86,7 @@ public sealed class MockTriagePlanner : ILlmClient
             ? ActionFor(urgency)
             : $"{ActionFor(urgency)} {advice}";
 
-        return Task.FromResult<PlanDecision>(new PlanDecision.Finish(message, result.ToJson()));
+        return Task.FromResult<PlanDecision>(new PlanDecision.Finish(message, result.ToJson(), Summary: urgency.ToString()));
     }
 
     // The safe fallback when the turn could not be assessed (a stage disabled or failed).
@@ -99,7 +99,8 @@ public sealed class MockTriagePlanner : ILlmClient
             ToolsInvoked = ctx.Observations.Select(o => o.ToolName).Distinct().ToArray(),
             Degraded = true,
         };
-        return Task.FromResult<PlanDecision>(new PlanDecision.Finish(degraded.RecommendedAction, degraded.ToJson()));
+        return Task.FromResult<PlanDecision>(
+            new PlanDecision.Finish(degraded.RecommendedAction, degraded.ToJson(), Summary: "SeeGp · degraded"));
     }
 
     // Turns the extractor's output into the scorer's input: the IDs marked present.

@@ -51,7 +51,7 @@ public sealed class SymptomKnowledgeBaseTool : ITool
             matched = matched.Select(entry => entry.Id).ToArray(),
         });
 
-        return Task.FromResult(new ToolResult(Success: true, Output: output));
+        return Task.FromResult(new ToolResult(Success: true, Output: output, Summary: $"score {score}"));
     }
 
     private static IEnumerable<string> ReadPresentIds(JsonElement args)

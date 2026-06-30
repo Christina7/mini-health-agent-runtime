@@ -116,7 +116,8 @@ static void PrintTrace(TraceNode node, int depth)
     var pad = new string(' ', depth * 2);
     var branch = depth == 0 ? "" : "└ ";
     var degraded = node.Degraded ? "  ⚠ degraded" : "";
-    Console.WriteLine($"  {pad}{branch}{node.Name}  ({node.DurationMs:F2} ms){degraded}");
+    var label = string.IsNullOrEmpty(node.Label) ? "" : $" · {node.Label}";
+    Console.WriteLine($"  {pad}{branch}{node.Name}{label}  ({node.DurationMs:F2} ms){degraded}");
     foreach (var child in node.Children)
     {
         PrintTrace(child, depth + 1);
