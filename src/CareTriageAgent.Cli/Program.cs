@@ -62,9 +62,11 @@ catch (ArgumentException ex)
 // Candidate tools and red-flag rules are domain data, shared with the web host via CareTriageDomain.
 // CareTriageSession filters tools by config and registers the guardrail unconditionally (the safety
 // invariant), wiring everything from config.
+var knowledgeBase = CareTriageDomain.DefaultKnowledgeBase();
 var candidateTools = new ITool[]
 {
-    breakSymptomKb ? new BrokenSymptomTool() : new SymptomKnowledgeBaseTool(CareTriageDomain.DefaultKnowledgeBase()),
+    new SymptomExtractorTool(new KeywordSymptomExtractor(knowledgeBase)),
+    breakSymptomKb ? new BrokenSymptomTool() : new SymptomKnowledgeBaseTool(knowledgeBase),
 };
 
 var redFlagRules = CareTriageDomain.DefaultRedFlagRules();

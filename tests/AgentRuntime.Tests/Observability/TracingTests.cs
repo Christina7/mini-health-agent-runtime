@@ -19,7 +19,11 @@ public class TracingTests
     [Fact]
     public async Task Turn_produces_a_trace_tree_of_steps_and_tool_calls()
     {
-        var registry = new ToolRegistry(new ITool[] { new SymptomKnowledgeBaseTool(Kb) });
+        var registry = new ToolRegistry(new ITool[]
+        {
+            new SymptomExtractorTool(new KeywordSymptomExtractor(Kb)),
+            new SymptomKnowledgeBaseTool(Kb),
+        });
         var orchestrator = new AgentOrchestrator(new MockTriagePlanner(Policy()), registry, rootSpanName: "triage.turn");
         var ctx = new WorkContext("conv-1");
 
@@ -37,7 +41,11 @@ public class TracingTests
     [Fact]
     public async Task Degraded_tool_call_is_tagged_in_the_trace()
     {
-        var registry = new ToolRegistry(new ITool[] { new ThrowingTool("symptom_kb") });
+        var registry = new ToolRegistry(new ITool[]
+        {
+            new SymptomExtractorTool(new KeywordSymptomExtractor(Kb)),
+            new ThrowingTool("symptom_kb"),
+        });
         var orchestrator = new AgentOrchestrator(new MockTriagePlanner(Policy()), registry, scope: new ExecutionScope(maxRetries: 0));
         var ctx = new WorkContext("conv-1");
 

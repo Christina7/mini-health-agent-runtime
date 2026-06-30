@@ -29,7 +29,11 @@ public class MultiTurnStateTests
     [Fact]
     public async Task Each_turn_rescores_the_latest_symptoms()
     {
-        var registry = new ToolRegistry(new ITool[] { new SymptomKnowledgeBaseTool(Kb) });
+        var registry = new ToolRegistry(new ITool[]
+        {
+            new SymptomExtractorTool(new KeywordSymptomExtractor(Kb)),
+            new SymptomKnowledgeBaseTool(Kb),
+        });
         var orchestrator = new AgentOrchestrator(new MockTriagePlanner(Policy()), registry);
         var ctx = new WorkContext("conv-1");
 
@@ -45,7 +49,11 @@ public class MultiTurnStateTests
     [Fact]
     public async Task A_degraded_turn_does_not_leak_into_the_next_turn()
     {
-        var registry = new ToolRegistry(new ITool[] { new FailOnceTool() });
+        var registry = new ToolRegistry(new ITool[]
+        {
+            new SymptomExtractorTool(new KeywordSymptomExtractor(Kb)),
+            new FailOnceTool(),
+        });
         var orchestrator = new AgentOrchestrator(new MockTriagePlanner(Policy()), registry, guardrails: null, scope: new ExecutionScope(maxRetries: 0));
         var ctx = new WorkContext("conv-1");
 

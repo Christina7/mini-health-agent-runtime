@@ -1,6 +1,7 @@
 {
   "agent": { "maxSteps": 6, "llmProvider": "mock" },
   "tools": {
+    "symptom_extractor": { "enabled": true },
     "symptom_kb": { "enabled": true }
   },
   "triage": { "selfCareMaxScore": 2, "seeGpMaxScore": 5, "urgentCareMaxScore": 8 },

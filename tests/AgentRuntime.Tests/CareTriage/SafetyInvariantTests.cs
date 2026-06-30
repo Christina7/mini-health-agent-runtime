@@ -13,7 +13,7 @@ public class SafetyInvariantTests
     private const string BaseJson = """
     {
       "agent":      { "maxSteps": 6, "llmProvider": "mock" },
-      "tools":      { "symptom_kb": { "enabled": true } },
+      "tools":      { "symptom_extractor": { "enabled": true }, "symptom_kb": { "enabled": true } },
       "triage":     { "selfCareMaxScore": 2, "seeGpMaxScore": 5, "urgentCareMaxScore": 8 },
       "resilience": { "toolMaxRetries": 2 }
     }
@@ -34,7 +34,12 @@ public class SafetyInvariantTests
     private static CareTriageSession SessionWith(params string[] flights)
     {
         var config = new RuntimeConfigProvider(BaseJson, Flights).Resolve<CareTriageConfig>(flights);
-        return new CareTriageSession(config, new ITool[] { new SymptomKnowledgeBaseTool(Kb) }, CardiacRules);
+        var tools = new ITool[]
+        {
+            new SymptomExtractorTool(new KeywordSymptomExtractor(Kb)),
+            new SymptomKnowledgeBaseTool(Kb),
+        };
+        return new CareTriageSession(config, tools, CardiacRules);
     }
 
     // Slice 11 (safety invariant): the red-flag guardrail is not config-driven. Even with the
@@ -50,9 +55,11 @@ public class SafetyInvariantTests
     }
 
     // Companion: the same flight DOES disable a normal tool — proving the flight is real and the
-    // guardrail's immunity above isn't just because the flight did nothing.
+    // guardrail's immunity above isn't just because the flight did nothing. With the scorer disabled
+    // the turn cannot be assessed, so it degrades safely to SeeGp rather than fabricating a score-0
+    // SelfCare (the #36 unsafe direction).
     [Fact]
-    public async Task A_flight_can_still_disable_a_normal_tool()
+    public async Task Disabling_the_scorer_degrades_safely_to_see_gp()
     {
         var session = SessionWith("disable-symptom-kb");
 
@@ -60,5 +67,7 @@ public class SafetyInvariantTests
 
         var triage = TriageResult.FromJson(turn.Result!.Value);
         Assert.Empty(triage.ToolsInvoked); // symptom_kb was switched off by the flight
+        Assert.Equal(UrgencyLevel.SeeGp, triage.Urgency);
+        Assert.True(triage.Degraded);
     }
 }
