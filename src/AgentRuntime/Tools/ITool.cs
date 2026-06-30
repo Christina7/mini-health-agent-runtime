@@ -17,5 +17,9 @@ public interface ITool
     Task<ToolResult> ExecuteAsync(JsonElement args, WorkContext ctx, CancellationToken ct);
 }
 
-/// <summary>The outcome of running a tool: a JSON output on success, or an error message.</summary>
-public sealed record ToolResult(bool Success, JsonElement Output, string? Error = null);
+/// <summary>
+/// The outcome of running a tool: a JSON output on success, or an error message. <paramref
+/// name="Summary"/> is an optional one-line trace label describing what the tool produced
+/// (e.g. "score 7") — observability only, never user-facing.
+/// </summary>
+public sealed record ToolResult(bool Success, JsonElement Output, string? Error = null, string? Summary = null);

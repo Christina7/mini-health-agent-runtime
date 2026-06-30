@@ -41,6 +41,7 @@ public sealed class SymptomExtractorTool : ITool
             fallback = extraction.Fallback,
         });
 
-        return new ToolResult(Success: true, Output: output);
+        var presentCount = extraction.Symptoms.Count(s => s.Present);
+        return new ToolResult(Success: true, Output: output, Summary: $"{presentCount} present");
     }
 }

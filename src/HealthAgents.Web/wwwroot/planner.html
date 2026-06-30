@@ -191,6 +191,8 @@
     .node.degraded .span-pill { background: var(--emergency-bg); color: var(--emergency-fg); }
     .node .name { flex: none; color: var(--ink-muted); }
     .node.degraded .name { color: var(--emergency-fg); font-weight: 600; }
+    .node .step-label { flex: none; color: var(--ink-tertiary); font-size: 10px; }
+    .node .step-label::before { content: "· "; }
     .bar-wrap { flex: 1; min-width: 36px; height: 5px; background: var(--surface-3); border-radius: var(--r-pill); overflow: hidden; }
     .bar { height: 100%; border-radius: var(--r-pill); background: linear-gradient(90deg, var(--accent), var(--accent-hover)); }
     .node.degraded .bar { background: linear-gradient(90deg, var(--emergency-line), #fca5a5); }
@@ -474,6 +476,7 @@
         <span class="caret ${hasChildren ? '' : 'leaf'}">▾</span>
         <span class="span-pill">${escapeHtml(kind.pill)}</span>
         <span class="name">${escapeHtml(kind.label)}${node.degraded ? ' ⚠' : ''}</span>
+        ${node.label ? `<span class="step-label">${escapeHtml(node.label)}</span>` : ''}
         <span class="bar-wrap"><span class="bar" style="width:${pct}%"></span></span>
         <span class="dur">${node.durationMs.toFixed(2)} ms</span>`;
       wrap.appendChild(row);
